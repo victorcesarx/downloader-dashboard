@@ -1,0 +1,67 @@
+/**
+ * Internationalization Module (i18n)
+ */
+import { store } from './state.js';
+
+let translations = {};
+
+export async function loadLocale(lang) {
+  try {
+    const res = await fetch(`/locales/${lang}.json`);
+    if (!res.ok) throw new Error(`Failed to load locale ${lang}`);
+    translations = await res.json();
+    store.state.lang = lang;
+    localStorage.setItem('downdash_lang', lang);
+    translateDOM();
+    return true;
+  } catch (err) {
+    console.error('Error loading locale:', err);
+    if (lang !== 'en') {
+      return loadLocale('en'); // fallback to English
+    }
+    return false;
+  }
+}
+
+export function t(key, params = {}) {
+  const keys = key.split('.');
+  let value = translations;
+  
+  for (const k of keys) {
+    if (value && value[k] !== undefined) {
+      value = value[k];
+    } else {
+      return key; // fallback to key name
+    }
+  }
+
+  if (typeof value === 'string') {
+    Object.keys(params).forEach(p => {
+      value = value.replace(new RegExp(`\\{${p}\\}`, 'g'), params[p]);
+    });
+  }
+
+  return value;
+}
+
+export function translateDOM() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    el.textContent = t(key);
+  });
+
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    el.placeholder = t(key);
+  });
+
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    el.title = t(key);
+  });
+}
+
+export async function initI18n() {
+  const lang = store.state.lang;
+  await loadLocale(lang);
+}

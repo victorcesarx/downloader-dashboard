@@ -1,0 +1,70 @@
+{
+  "app": {
+    "title": "DownDash - Media Extractor & Downloader",
+    "subtitle": "Extract videos, audio, images and documents from any site instantly",
+    "tagline": "Paste any URL and download media quickly, safely, and in high quality.",
+    "start_now": "Start Now",
+    "features_link": "Features",
+    "supported_sites": "Supported Sites"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "landing": "Home",
+    "theme": "Toggle Theme",
+    "language": "Language"
+  },
+  "search": {
+    "placeholder": "Paste page link here (e.g., https://gofile.io/d/..., pixeldrain.com...)",
+    "analyze_btn": "Analyze Link",
+    "analyzing": "Analyzing..."
+  },
+  "filters": {
+    "all": "All",
+    "video": "Videos",
+    "image": "Images",
+    "audio": "Audio",
+    "document": "Documents",
+    "search_input": "Search media..."
+  },
+  "actions": {
+    "select_all": "Select All",
+    "deselect_all": "Deselect All",
+    "download_selected": "Download Selected (ZIP)",
+    "download": "Download",
+    "preview": "Watch / Preview",
+    "cancel": "Cancel",
+    "close": "Close",
+    "copy_link": "Copy Link"
+  },
+  "views": {
+    "grid": "Grid",
+    "list": "List"
+  },
+  "status": {
+    "empty": "No media found. Paste a URL above to start analyzing.",
+    "found_count": "{count} media item(s) found",
+    "loading": "Extracting information and media links...",
+    "downloading": "Downloading...",
+    "paused": "Paused",
+    "error": "An error occurred while processing the link. Check the URL and try again."
+  },
+  "zip": {
+    "title": "Batch Download (ZIP)",
+    "preparing": "Preparing files for compression...",
+    "progress": "Processing file {current} of {total}",
+    "download_ready": "Your ZIP file is ready!",
+    "download_btn": "Download ZIP Now",
+    "speed": "Speed: {speed}",
+    "estimated_bytes": "Processed size: {bytes}"
+  },
+  "modal": {
+    "preview_title": "Media Preview",
+    "unsupported_preview": "Preview not supported for this file type."
+  },
+  "toast": {
+    "analyzed_success": "Media extracted successfully!",
+    "copied": "Link copied to clipboard!",
+    "download_started": "Download started.",
+    "zip_error": "Error generating ZIP file."
+  }
+}

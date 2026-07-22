@@ -1,0 +1,70 @@
+{
+  "app": {
+    "title": "DownDash - Extrator e Downloader de Mídias",
+    "subtitle": "Extraia vídeos, áudios, imagens e documentos de qualquer site instantaneamente",
+    "tagline": "Cole qualquer URL e baixe mídias de forma rápida, segura e em alta qualidade.",
+    "start_now": "Começar Agora",
+    "features_link": "Recursos",
+    "supported_sites": "Sites Suportados"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "landing": "Início",
+    "theme": "Alternar Tema",
+    "language": "Idioma"
+  },
+  "search": {
+    "placeholder": "Cole aqui o link da página (ex: https://gofile.io/d/..., pixeldrain.com...)",
+    "analyze_btn": "Analisar Link",
+    "analyzing": "Analisando..."
+  },
+  "filters": {
+    "all": "Todos",
+    "video": "Vídeos",
+    "image": "Imagens",
+    "audio": "Áudios",
+    "document": "Documentos",
+    "search_input": "Buscar mídias..."
+  },
+  "actions": {
+    "select_all": "Selecionar Todos",
+    "deselect_all": "Desmarcar Todos",
+    "download_selected": "Baixar Selecionados (ZIP)",
+    "download": "Download",
+    "preview": "Assistir / Preview",
+    "cancel": "Cancelar",
+    "close": "Fechar",
+    "copy_link": "Copiar Link"
+  },
+  "views": {
+    "grid": "Grade",
+    "list": "Lista"
+  },
+  "status": {
+    "empty": "Nenhuma mídia encontrada. Cole uma URL acima para começar a análise.",
+    "found_count": "{count} mídia(s) encontrada(s)",
+    "loading": "Extraindo informações e links de mídia...",
+    "downloading": "Baixando...",
+    "paused": "Pausado",
+    "error": "Ocorreu um erro ao processar o link. Verifique a URL e tente novamente."
+  },
+  "zip": {
+    "title": "Download em Lote (ZIP)",
+    "preparing": "Preparando arquivos para compressão...",
+    "progress": "Processando arquivo {current} de {total}",
+    "download_ready": "Seu arquivo ZIP está pronto!",
+    "download_btn": "Baixar ZIP Agora",
+    "speed": "Velocidade: {speed}",
+    "estimated_bytes": "Tamanho processado: {bytes}"
+  },
+  "modal": {
+    "preview_title": "Visualizar Mídia",
+    "unsupported_preview": "Visualização não suportada para este tipo de arquivo."
+  },
+  "toast": {
+    "analyzed_success": "Mídias extraídas com sucesso!",
+    "copied": "Link copiado para a área de transferência!",
+    "download_started": "Download iniciado.",
+    "zip_error": "Erro ao gerar arquivo ZIP."
+  }
+}

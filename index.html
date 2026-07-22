@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="app.title">DownDash - Extrator e Downloader de Mídias</title>
+  <meta name="description" content="DownDash permite extrair e baixar imagens, vídeos e arquivos de qualquer site de hospedagem de forma fácil e rápida." />
+  <link rel="stylesheet" href="/styles/main.css">
+  <script>
+    const theme = localStorage.getItem('downdash_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+  </script>
+</head>
+<body>
+  <div class="bg-glow"></div>
+
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="container" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+      <a href="/index.html" class="brand">
+        <div class="brand-icon">⚡</div>
+        <span>DownDash</span>
+      </a>
+
+      <div class="nav-actions">
+        <a href="/dashboard.html" class="btn btn-primary btn-sm" data-i18n="nav.dashboard">Dashboard</a>
+        <select id="lang-select" class="select-input" aria-label="Language Selector">
+          <option value="pt-BR">🇧🇷 pt-BR</option>
+          <option value="en">🇺🇸 English</option>
+        </select>
+        <label class="theme-toggle" aria-label="Toggle Theme">
+          <input type="checkbox" id="theme-toggle-input" />
+          <span class="theme-toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" style="padding-top: 80px; padding-bottom: 80px;">
+    <div style="text-align: center; max-width: 800px; margin: 0 auto;">
+      <h1 style="font-size: 3.5rem; margin-bottom: 24px; line-height: 1.1;">
+        Baixe mídias de qualquer lugar com o <span class="gradient-text">DownDash</span>
+      </h1>
+      <p style="font-size: 1.25rem; color: var(--text-secondary); margin-bottom: 40px; line-height: 1.6;" data-i18n="app.tagline">
+        Cole qualquer URL e baixe mídias de forma rápida, segura e em alta qualidade.
+      </p>
+
+      <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 60px;">
+        <a href="/dashboard.html" class="btn btn-primary" style="padding: 14px 32px; font-size: 1.1rem;" data-i18n="app.start_now">
+          Abrir Dashboard ⚡
+        </a>
+      </div>
+    </div>
+
+    <!-- Feature Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-top: 40px;">
+      <div style="background: var(--bg-card); border: 1px solid var(--glass-border); padding: 32px; border-radius: var(--radius-lg); backdrop-filter: blur(16px);">
+        <div style="font-size: 2.5rem; margin-bottom: 16px;">🚀</div>
+        <h3 style="margin-bottom: 12px; font-size: 1.3rem;">Extração Ultra Rápida</h3>
+        <p style="color: var(--text-secondary);">Scraper inteligente capaz de identificar múltiplos formatos de mídia em segundos.</p>
+      </div>
+
+      <div style="background: var(--bg-card); border: 1px solid var(--glass-border); padding: 32px; border-radius: var(--radius-lg); backdrop-filter: blur(16px);">
+        <div style="font-size: 2.5rem; margin-bottom: 16px;">📦</div>
+        <h3 style="margin-bottom: 12px; font-size: 1.3rem;">Download em Lote ZIP</h3>
+        <p style="color: var(--text-secondary);">Selecione dezenas de mídias e receba um único arquivo ZIP compactado com progresso em tempo real.</p>
+      </div>
+
+      <div style="background: var(--bg-card); border: 1px solid var(--glass-border); padding: 32px; border-radius: var(--radius-lg); backdrop-filter: blur(16px);">
+        <div style="font-size: 2.5rem; margin-bottom: 16px;">🛡️</div>
+        <h3 style="margin-bottom: 12px; font-size: 1.3rem;">Proxy Integrado</h3>
+        <p style="color: var(--text-secondary);">Bypass inteligente de CORS e suporte a Range Headers para reproduzir vídeos diretamente no navegador.</p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2026 DownDash - Downloader Dashboard. Todos os direitos reservados.</p>
+    </div>
+  </footer>
+
+  <script type="module" src="/scripts/app.js"></script>
+</body>
+</html>

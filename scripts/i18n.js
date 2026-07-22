@@ -6,6 +6,13 @@ import { store } from './state.js';
 let translations = {};
 
 export async function loadLocale(lang) {
+  if (window.__LOCALES__ && window.__LOCALES__[lang]) {
+    translations = window.__LOCALES__[lang];
+    store.state.lang = lang;
+    localStorage.setItem('downdash_lang', lang);
+    translateDOM();
+    return true;
+  }
   try {
     const res = await fetch(`/locales/${lang}.json`);
     if (!res.ok) throw new Error(`Failed to load locale ${lang}`);
@@ -17,7 +24,7 @@ export async function loadLocale(lang) {
   } catch (err) {
     console.error('Error loading locale:', err);
     if (lang !== 'en') {
-      return loadLocale('en'); // fallback to English
+      return loadLocale('en');
     }
     return false;
   }
@@ -48,6 +55,11 @@ export function translateDOM() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
     el.textContent = t(key);
+  });
+
+  document.querySelectorAll('[data-i18n-html]').forEach(el => {
+    const key = el.getAttribute('data-i18n-html');
+    el.innerHTML = t(key);
   });
 
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {

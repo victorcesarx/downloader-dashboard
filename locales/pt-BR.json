@@ -38,7 +38,19 @@
   },
   "views": {
     "grid": "Grade",
-    "list": "Lista"
+    "list": "Lista",
+    "grid_title": "Modo Grade",
+    "list_title": "Modo Lista"
+  },
+  "landing": {
+    "headline": "Baixe mídias de qualquer lugar com o <span class=\"gradient-text\">DownDash</span>",
+    "feature1_title": "Extração Ultra Rápida",
+    "feature1_desc": "Scraper inteligente capaz de identificar múltiplos formatos de mídia em segundos.",
+    "feature2_title": "Download em Lote ZIP",
+    "feature2_desc": "Selecione dezenas de mídias e receba um único arquivo ZIP compactado com progresso em tempo real.",
+    "feature3_title": "Proxy Integrado",
+    "feature3_desc": "Bypass inteligente de CORS e suporte a Range Headers para reproduzir vídeos diretamente no navegador.",
+    "footer": "DownDash - Downloader Dashboard. Todos os direitos reservados."
   },
   "status": {
     "empty": "Nenhuma mídia encontrada. Cole uma URL acima para começar a análise.",
@@ -61,10 +73,18 @@
     "preview_title": "Visualizar Mídia",
     "unsupported_preview": "Visualização não suportada para este tipo de arquivo."
   },
+  "dl": {
+    "pause": "Pausar",
+    "resume": "Retomar",
+    "cancel": "Cancelar",
+    "complete": "Download concluído!",
+    "error": "Erro no download"
+  },
   "toast": {
     "analyzed_success": "Mídias extraídas com sucesso!",
     "copied": "Link copiado para a área de transferência!",
     "download_started": "Download iniciado.",
+    "download_in_progress": "Já existe um download em andamento",
     "zip_error": "Erro ao gerar arquivo ZIP."
   }
 }

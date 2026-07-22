@@ -2,7 +2,7 @@
  * DOM Renderer Module (renderer.js)
  */
 import { store } from './state.js';
-import { formatBytes, sanitizeHtml, Toast } from './utils.js';
+import { formatBytes, sanitizeHtml } from './utils.js';
 import { t } from './i18n.js';
 import { downloadSingleItem } from './download.js';
 
@@ -66,9 +66,9 @@ export function renderMediaContainer() {
 
     let previewContent = `<div class="media-placeholder-icon">${typeIconMap[item.type] || '📄'}</div>`;
     if (item.type === 'image') {
-      previewContent = `<img src="${item.proxyUrl}" alt="${sanitizeHtml(item.name)}" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'media-placeholder-icon\\'>🖼️</div>';" />`;
+      previewContent = `<img src="${item.proxyUrl}" alt="${sanitizeHtml(item.name)}" loading="lazy" onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'media-placeholder-icon\\'>🖼️</div>';" />`;
     } else if (item.thumbnail) {
-      previewContent = `<img src="${item.thumbnail}" alt="${sanitizeHtml(item.name)}" loading="lazy" />`;
+      previewContent = `<img src="${item.thumbnail}" alt="${sanitizeHtml(item.name)}" loading="lazy" onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'media-placeholder-icon\\'>${typeIconMap[item.type] || '📄'}</div>';" />`;
     }
 
     return `
@@ -114,13 +114,17 @@ function attachCardEvents(container) {
     });
   });
 
-  // Download buttons
   container.querySelectorAll('.download-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const id = e.target.getAttribute('data-id');
       const item = store.state.items.find(i => i.id === id);
+      const cardEl = e.target.closest('.media-card');
       if (item) {
-        downloadSingleItem(item);
+        if (item.openInBrowser) {
+          window.open(item.url, '_blank');
+        } else {
+          downloadSingleItem(item, cardEl);
+        }
       }
     });
   });
@@ -131,7 +135,11 @@ function attachCardEvents(container) {
       const id = e.target.getAttribute('data-id');
       const item = store.state.items.find(i => i.id === id);
       if (item) {
-        openPreviewModal(item);
+        if (item.openInBrowser) {
+          window.open(item.url, '_blank');
+        } else {
+          openPreviewModal(item);
+        }
       }
     });
   });
@@ -139,10 +147,24 @@ function attachCardEvents(container) {
 
 export function updateBatchActionsUI() {
   const batchBtn = document.getElementById('download-selected-btn');
-  const count = store.state.selectedItemIds.size;
+  const totalSizeEl = document.getElementById('total-size-display');
+  const selectedIds = store.state.selectedItemIds;
+  const count = selectedIds.size;
   if (batchBtn) {
     batchBtn.disabled = count === 0;
     batchBtn.textContent = `${t('actions.download_selected')} (${count})`;
+  }
+  if (totalSizeEl) {
+    if (count === 0) {
+      totalSizeEl.textContent = '';
+    } else {
+      let totalBytes = 0;
+      for (const id of selectedIds) {
+        const item = store.state.items.find(i => i.id === id);
+        if (item && item.size) totalBytes += item.size;
+      }
+      totalSizeEl.textContent = totalBytes > 0 ? `(${formatBytes(totalBytes)})` : '';
+    }
   }
 }
 

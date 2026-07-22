@@ -1,6 +1,6 @@
 {
   "name": "downloader-dashboard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Downloader Dashboard (DownDash) - Web App for extracting and downloading media from any page",
   "main": "server.js",
   "type": "module",

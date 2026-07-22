@@ -38,7 +38,19 @@
   },
   "views": {
     "grid": "Grid",
-    "list": "List"
+    "list": "List",
+    "grid_title": "Grid View",
+    "list_title": "List View"
+  },
+  "landing": {
+    "headline": "Download media from anywhere with <span class=\"gradient-text\">DownDash</span>",
+    "feature1_title": "Ultra-Fast Extraction",
+    "feature1_desc": "Smart scraper capable of identifying multiple media formats in seconds.",
+    "feature2_title": "Batch ZIP Download",
+    "feature2_desc": "Select dozens of media files and receive a single compressed ZIP file with real-time progress.",
+    "feature3_title": "Built-in Proxy",
+    "feature3_desc": "Smart CORS bypass with Range Header support to play videos directly in the browser.",
+    "footer": "DownDash - Downloader Dashboard. All rights reserved."
   },
   "status": {
     "empty": "No media found. Paste a URL above to start analyzing.",
@@ -61,10 +73,18 @@
     "preview_title": "Media Preview",
     "unsupported_preview": "Preview not supported for this file type."
   },
+  "dl": {
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel",
+    "complete": "Download complete!",
+    "error": "Download error"
+  },
   "toast": {
     "analyzed_success": "Media extracted successfully!",
     "copied": "Link copied to clipboard!",
     "download_started": "Download started.",
+    "download_in_progress": "A download is already in progress",
     "zip_error": "Error generating ZIP file."
   }
 }

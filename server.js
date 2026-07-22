@@ -42,22 +42,43 @@ const MIME_TYPES = {
 // Helper: Standard Fetch text helper with User-Agent
 async function fetchText(url, headers = {}) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), 20000);
   try {
+    const origin = new URL(url).origin;
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': origin + '/',
         ...headers
       },
       signal: controller.signal
     });
     clearTimeout(timer);
-    if (!res.ok) return null;
-    return await res.text();
+    if (!res.ok) {
+      console.warn(`[fetchText] ${res.status} for ${url}`);
+      return null;
+    }
+    const text = await res.text();
+    if (!text || text.length < 50) {
+      console.warn(`[fetchText] Empty or too short body from ${url} (${text?.length || 0} chars)`);
+      return null;
+    }
+    return text;
   } catch (err) {
     clearTimeout(timer);
+    console.warn(`[fetchText] Error ${url}: ${err.message}`);
     return null;
   }
+}
+
+// Helper: extract og:image from HTML as fallback thumbnail
+function extractOGImage(html) {
+  const match = html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
+                html.match(/content=["']([^"']+)["']\s+property=["']og:image["']/i) ||
+                html.match(/name=["']twitter:image["']\s+content=["']([^"']+)["']/i);
+  return match ? match[1] : null;
 }
 
 // GoFile In-Memory Token Cache
@@ -69,16 +90,40 @@ function generateWT(token) {
   return createHash('sha256').update(token || '').digest('hex');
 }
 
+const GOFILE_WT = '4fd6sg89d7s6';
+
 async function createGoFileToken() {
   try {
     const accRes = await fetch('https://api.gofile.io/accounts', {
       method: 'POST',
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Origin': 'https://gofile.io',
+        'Referer': 'https://gofile.io/'
+      }
     });
     if (accRes.ok) {
       const accData = await accRes.json();
       if (accData.status === 'ok' && accData.data && accData.data.token) {
         return accData.data.token;
+      }
+    }
+    if (accRes.status === 429) {
+      console.warn('[GoFile] Rate-limited, waiting 15s before retry...');
+      await new Promise(r => setTimeout(r, 15000));
+      const retryRes = await fetch('https://api.gofile.io/accounts', {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Origin': 'https://gofile.io',
+          'Referer': 'https://gofile.io/'
+        }
+      });
+      if (retryRes.ok) {
+        const retryData = await retryRes.json();
+        if (retryData.status === 'ok' && retryData.data && retryData.data.token) {
+          return retryData.data.token;
+        }
       }
     }
   } catch (e) {
@@ -93,9 +138,12 @@ async function fetchGoFileContents(contentId, token) {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Authorization': `Bearer ${token}`,
     'X-Website-Token': wt,
-    'Cookie': `accountToken=${token}`
+    'X-BL': 'en-US',
+    'Cookie': `accountToken=${token}`,
+    'Origin': 'https://gofile.io',
+    'Referer': 'https://gofile.io/'
   };
-  return fetch(`https://api.gofile.io/contents/${contentId}?wt=4fd6a5da8061`, { headers });
+  return fetch(`https://api.gofile.io/contents/${contentId}?wt=${GOFILE_WT}&page=1&pageSize=1000`, { headers });
 }
 
 // 1. GoFile Scraper
@@ -278,10 +326,20 @@ async function scrapePixelDrain(url) {
       else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) || mime.startsWith('image/')) type = 'image';
       else if (['mp3', 'wav', 'ogg'].includes(ext) || mime.startsWith('audio/')) type = 'audio';
 
+      let thumbnail = null;
+      if (type === 'video') {
+        try {
+          const pageHtml = await fetchText(url);
+          if (pageHtml) {
+            thumbnail = extractOGImage(pageHtml);
+          }
+        } catch (e) {}
+      }
+
       return {
         title: name,
         url,
-        items: [{ type, name, url: directUrl, ext, label: mime || type, size }]
+        items: [{ type, name, url: directUrl, ext, label: mime || type, size, thumbnail }]
       };
     }
 
@@ -321,7 +379,7 @@ async function scrapePixelDrain(url) {
   return null;
 }
 
-// 3. CyberDrop Scraper
+// 3. CyberDrop Scraper (album + single-file)
 async function scrapeCyberDrop(url) {
   try {
     if (!url.includes('cyberdrop.')) return null;
@@ -329,38 +387,191 @@ async function scrapeCyberDrop(url) {
     if (!html) return null;
 
     const items = [];
-    const linkRegex = /href=["'](https?:\/\/[^"']+\.(?:mp4|mkv|webm|jpg|jpeg|png|webp|gif|mp3|wav))["']/gi;
-    let match;
     const seen = new Set();
+    const isFilePage = url.includes('/f/');
 
-    while ((match = linkRegex.exec(html)) !== null) {
-      const mediaUrl = match[1];
-      if (seen.has(mediaUrl)) continue;
-      seen.add(mediaUrl);
+    // Diagnostic log
+    const titleM = html.match(/<title>(.*?)<\/title>/i);
+    console.log(`[CyberDrop] title="${titleM ? titleM[1] : 'N/A'}" len=${html.length} og:video=${/og:video/i.test(html)} <video>=${/<video/i.test(html)} <source>=${/<source/i.test(html)} og:image=${/og:image/i.test(html)} img=${/<img\s/i.test(html)}`);
 
-      const name = mediaUrl.split('/').pop() || 'media_file';
+    // Detect Cloudflare challenge
+    if (html.includes('cf-browser-') || html.includes('challenge-platform') || html.includes('Just a moment') || html.includes('name="clckd"') || html.includes("name='clckd'")) {
+      console.warn(`[CyberDrop] Blocked by Cloudflare challenge: ${url}`);
+      return null;
+    }
+
+    // Collect potential video thumbnails from the page (skip icons/logos)
+    const thumbUrls = [];
+    const imgTagRegex = /<img[^>]*src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp|gif))["'][^>]*>/gi;
+    let imgMatch;
+    while ((imgMatch = imgTagRegex.exec(html)) !== null) {
+      const src = imgMatch[1];
+      if (/icon|logo|avatar|spinner|loading|thumb-|emoji|favicon/i.test(src)) continue;
+      if (thumbUrls.length < 5 && !thumbUrls.includes(src)) thumbUrls.push(src);
+    }
+
+    // Check if a URL is likely a real media file (not a layout asset)
+    function isMediaUrl(urlStr) {
+      if (/icon|logo|avatar|spinner|loading|banner|sprite|favicon|emoji|placeholder/i.test(urlStr)) return false;
+      if (/\/assets?\//i.test(urlStr)) return false;
+      return true;
+    }
+
+    // Compute extension, type, and name from a URL
+    function parseUrl(mediaUrl) {
+      const rawName = mediaUrl.split('/').pop()?.split('?')[0] || 'media_file';
+      const name = decodeURIComponent(rawName);
       const ext = (name.split('.').pop() || '').toLowerCase();
       let type = 'document';
-      if (['mp4', 'webm', 'mkv'].includes(ext)) type = 'video';
+      if (['mp4', 'webm', 'mkv', 'mov'].includes(ext)) type = 'video';
       else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) type = 'image';
-      else if (['mp3', 'wav'].includes(ext)) type = 'audio';
+      else if (['mp3', 'wav', 'ogg'].includes(ext)) type = 'audio';
+      return { name, ext, type };
+    }
 
+    function addItem(mediaUrl, thumb = null, forcedType = null) {
+      if (seen.has(mediaUrl)) return;
+      if (!isMediaUrl(mediaUrl)) return;
+      seen.add(mediaUrl);
+      const { name, ext, type: detectedType } = parseUrl(mediaUrl);
+      const finalType = forcedType || detectedType;
       items.push({
-        type,
-        name,
-        url: mediaUrl,
-        ext,
-        label: type,
-        size: 0
+        type: finalType, name, url: mediaUrl, ext,
+        label: finalType, size: 0,
+        thumbnail: finalType !== 'image' ? (thumb || null) : null
       });
     }
 
     const titleMatch = html.match(/<title>(.*?)<\/title>/i);
-    return {
-      title: titleMatch ? titleMatch[1].trim() : 'CyberDrop Album',
-      url,
-      items
-    };
+    const pageTitle = titleMatch ? titleMatch[1].trim() : 'CyberDrop';
+
+    // API client for resolving CyberDrop file slugs
+    async function resolveCyberDropFile(slug, thumb = null) {
+      try {
+        const infoRes = await fetch(`https://api.cyberdrop.cr/api/file/info/${slug}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept': 'application/json' }
+        });
+        if (!infoRes.ok) return null;
+        const info = await infoRes.json();
+        if (!info || !info.auth_url) return null;
+
+        const authRes = await fetch(info.auth_url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept': 'application/json' }
+        });
+        if (!authRes.ok) return null;
+        const authData = await authRes.json();
+        if (!authData || !authData.url) return null;
+
+        return {
+          url: authData.url,
+          name: info.name || `cyberdrop_${slug}`,
+          size: info.size || 0,
+          type: info.type || 'video/mp4',
+          thumbnail: info.thumbnail_url || (thumb && isMediaUrl(thumb) ? thumb : null)
+        };
+      } catch (e) { return null; }
+    }
+
+    // ----- SINGLE FILE PAGE (/f/) -----
+    if (isFilePage) {
+      const slug = url.match(/\/[a-z]\/([a-zA-Z0-9]+)/)?.[1];
+      if (slug) {
+        const resolved = await resolveCyberDropFile(slug);
+        if (resolved) {
+          items.push({
+            type: 'video',
+            name: resolved.name,
+            url: resolved.url,
+            ext: (resolved.type || '').split('/')[1] || 'mp4',
+            label: 'video',
+            size: resolved.size,
+            thumbnail: resolved.thumbnail
+          });
+        }
+      }
+      // Fallback: only if API failed, try HTML parsing
+      if (items.length === 0) {
+        const ogVideo = html.match(/property=["']og:video["']\s+content=["']([^"']+)["']/i)
+                     || html.match(/content=["']([^"']+)["']\s+property=["']og:video["']/i);
+        if (ogVideo) addItem(ogVideo[1], extractOGImage(html) || thumbUrls[0] || null, 'video');
+      }
+      if (items.length === 0) {
+        console.log(`[CyberDrop] API + HTML fallback failed for ${url}`);
+      }
+    }
+
+    // ----- ALBUM PAGE -----
+    else {
+      // 1. <a href="..."> with known extensions
+      const linkRegex = /href=["'](https?:\/\/[^"']+\.(?:mp4|mkv|webm|jpg|jpeg|png|webp|gif|mp3|wav))["']/gi;
+      let match;
+      let thumbIdx = 0;
+      while ((match = linkRegex.exec(html)) !== null) {
+        const mediaUrl = match[1];
+        if (seen.has(mediaUrl)) continue;
+        if (!isMediaUrl(mediaUrl)) continue;
+        seen.add(mediaUrl);
+        const { name, ext, type } = parseUrl(mediaUrl);
+        const thumbForItem = type === 'video' && thumbIdx < thumbUrls.length ? thumbUrls[thumbIdx++] : null;
+        items.push({ type, name, url: mediaUrl, ext, label: type, size: 0, thumbnail: thumbForItem });
+      }
+
+      // 2. <a href="/f/xxxxx"> file page links (common in albums)
+      // Each links to a file page; try to resolve via API
+      const fileLinkRegex = /<a[^>]*href=["'](?:\/f\/|https?:\/\/[^"']*\/f\/)([a-zA-Z0-9]+)["'][^>]*>[\s\S]*?<img[^>]*src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp|gif))["']/gi;
+      let fm;
+      while ((fm = fileLinkRegex.exec(html)) !== null && items.length < 50) {
+        const fileId = fm[1];
+        const thumbUrl = fm[2];
+        if (seen.has(fileId)) continue;
+        seen.add(fileId);
+        if (thumbUrls.length < 10 && !thumbUrls.includes(thumbUrl) && isMediaUrl(thumbUrl)) thumbUrls.push(thumbUrl);
+
+        const resolved = await resolveCyberDropFile(fileId, thumbUrl);
+        if (resolved) {
+          items.push({
+            type: 'video',
+            name: resolved.name,
+            url: resolved.url,
+            ext: (resolved.type || '').split('/')[1] || 'mp4',
+            label: 'video',
+            size: resolved.size,
+            thumbnail: resolved.thumbnail
+          });
+        }
+      }
+
+      // 3. Fallback: video/img src attributes
+      if (items.length === 0) {
+        const fallbackRegex = /src=["'](https?:\/\/[^"']+\.(?:mp4|mkv|webm|mov|jpg|jpeg|png|webp|gif))["']/gi;
+        while ((match = fallbackRegex.exec(html)) !== null) {
+          const mediaUrl = match[1];
+          if (seen.has(mediaUrl)) continue;
+          if (!isMediaUrl(mediaUrl)) continue;
+          seen.add(mediaUrl);
+          const { name, ext, type } = parseUrl(mediaUrl);
+          items.push({ type, name, url: mediaUrl, ext, label: type, size: 0 });
+        }
+      }
+
+      // 4. Try video source tags
+      if (items.length === 0) {
+        const videoSrcRegex = /<source[^>]+src=["'](https?:\/\/[^"']+\.(?:mp4|mkv|webm|mov))["']/gi;
+        while ((match = videoSrcRegex.exec(html)) !== null) {
+          const mediaUrl = match[1];
+          if (seen.has(mediaUrl)) continue;
+          if (!isMediaUrl(mediaUrl)) continue;
+          seen.add(mediaUrl);
+          const { name, ext } = parseUrl(mediaUrl);
+          items.push({ type: 'video', name, url: mediaUrl, ext, label: 'video', size: 0 });
+        }
+      }
+    }
+
+    if (items.length === 0 && isFilePage) {
+      console.warn(`[CyberDrop] No media found for ${url} — page may require JS to load video`);
+    }
+    return { title: pageTitle, url, items };
   } catch (err) {
     console.error('CyberDrop Scrape Error:', err);
     return null;
@@ -417,7 +628,12 @@ async function scrapeBunkr(url) {
             if (['mp4', 'mkv', 'webm', 'mov'].includes(ext)) type = 'video';
             else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) type = 'image';
 
-            items.push({ type, name, url: directUrl, ext, label: type, size: 0 });
+            let thumbnail = null;
+            if (type === 'video') {
+              thumbnail = extractOGImage(html);
+            }
+
+            items.push({ type, name, url: directUrl, ext, label: type, size: 0, thumbnail });
           }
         }
       } catch (err) {
@@ -431,6 +647,18 @@ async function scrapeBunkr(url) {
       let match;
       const seen = new Set();
 
+      // Extract thumbnail preview images from the page
+      const thumbUrls = [];
+      const imgRegex = /<img[^>]*src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp|gif))["'][^>]*>/gi;
+      let imgMatch;
+      while ((imgMatch = imgRegex.exec(html)) !== null) {
+        const src = imgMatch[1];
+        if (!thumbUrls.includes(src) && !src.includes('icon') && !src.includes('logo') && !src.includes('avatar')) {
+          thumbUrls.push(src);
+        }
+      }
+
+      let thumbIdx = 0;
       while ((match = linkRegex.exec(html)) !== null) {
         const mediaUrl = match[1];
         if (seen.has(mediaUrl)) continue;
@@ -442,7 +670,9 @@ async function scrapeBunkr(url) {
         if (['mp4', 'webm', 'mkv'].includes(ext)) type = 'video';
         else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) type = 'image';
 
-        items.push({ type, name, url: mediaUrl, ext, label: type, size: 0 });
+        const thumbForItem = type === 'video' && thumbIdx < thumbUrls.length ? thumbUrls[thumbIdx++] : null;
+
+        items.push({ type, name, url: mediaUrl, ext, label: type, size: 0, thumbnail: thumbForItem });
       }
     }
 
@@ -470,8 +700,11 @@ async function scrapeGeneric(url) {
   const items = [];
   const seen = new Set();
 
+  const pageOGImage = extractOGImage(html);
+
   // Extract <source src="...">, <video src="...">, <img src="...">, <a href="...">
-  const mediaRegex = /(?:src|href)=["'](https?:\/\/[^"'\s>]+?\.(mp4|mkv|webm|mov|jpg|jpeg|png|webp|gif|mp3|wav|ogg|pdf|zip))["']/gi;
+  // Also data-src, data-url (common for lazy-loaded content)
+  const mediaRegex = /(?:src|href|data-src|data-url|data-lazy-src|data-original)=["'](https?:\/\/[^"'\s>]+?\.(mp4|mkv|webm|mov|jpg|jpeg|png|webp|gif|mp3|wav|ogg|pdf|zip))["']/gi;
   let match;
 
   while ((match = mediaRegex.exec(html)) !== null) {
@@ -490,13 +723,118 @@ async function scrapeGeneric(url) {
     const rawName = urlParts[urlParts.length - 1].split('?')[0];
     const name = decodeURIComponent(rawName) || `media.${ext}`;
 
+    const thumbnail = type !== 'image' ? pageOGImage : null;
+
     items.push({
       type,
       name,
       url: mediaUrl,
       ext,
       label: type,
-      size: 0
+      size: 0,
+      thumbnail
+    });
+  }
+
+  // 2nd pass: look for URLs in <script> tags (JSON embeds, config objects)
+  if (items.length === 0) {
+    const scriptContents = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)];
+    for (const sc of scriptContents) {
+      const c = sc[1];
+      const urlMatches = c.match(/"(https?:\/\/[^"]+\.(mp4|mkv|webm|mov|jpg|jpeg|png|webp|gif|mp3|wav|ogg))"/gi);
+      if (urlMatches) {
+        for (const u of urlMatches) {
+          const cleaned = u.slice(1, -1);
+          if (seen.has(cleaned)) continue;
+          seen.add(cleaned);
+          const extMatch = cleaned.match(/\.(\w+)(?:\?|$)/);
+          const ext = extMatch ? extMatch[1].toLowerCase() : 'mp4';
+          let type = 'document';
+          if (['mp4', 'mkv', 'webm', 'mov'].includes(ext)) type = 'video';
+          else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) type = 'image';
+          else if (['mp3', 'wav', 'ogg'].includes(ext)) type = 'audio';
+          const urlParts = cleaned.split('/');
+          const rawName = urlParts[urlParts.length - 1].split('?')[0];
+          const name = decodeURIComponent(rawName) || `media.${ext}`;
+          items.push({ type, name, url: cleaned, ext, label: type, size: 0, thumbnail: type !== 'image' ? pageOGImage : null });
+        }
+      }
+    }
+  }
+
+  // 3rd pass: try to find video URLs from <video> tags without extension in src
+  if (items.length === 0) {
+    const videoTagRegex = /<video[^>]+src=["'](https?:\/\/[^"']+)["']/gi;
+    let vm;
+    while ((vm = videoTagRegex.exec(html)) !== null) {
+      const videoUrl = vm[1];
+      if (seen.has(videoUrl)) continue;
+      seen.add(videoUrl);
+      items.push({ type: 'video', name: `video_${items.length + 1}`, url: videoUrl, ext: 'mp4', label: 'video', size: 0, thumbnail: pageOGImage });
+    }
+  }
+
+  return { title, url, items };
+}
+
+async function scrapeErome(url) {
+  const html = await fetchText(url);
+  if (!html) return { title: url, url, items: [] };
+
+  const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+  const title = titleMatch ? titleMatch[1].trim() : url;
+  const items = [];
+  const seen = new Set();
+
+  const videoRegex = /<video[^>]*poster="([^"]*)"[^>]*>[\s\S]*?<source[^>]*src="([^"]*\.(?:mp4|mkv|webm|mov))"[^>]*>/gi;
+  let videoMatch;
+  while ((videoMatch = videoRegex.exec(html)) !== null) {
+    const posterUrl = videoMatch[1];
+    const videoUrl = videoMatch[2];
+
+    if (seen.has(videoUrl)) continue;
+    seen.add(videoUrl);
+
+    const extMatch = videoUrl.match(/\.(\w+)(?:\?|$)/);
+    const ext = extMatch ? extMatch[1].toLowerCase() : 'mp4';
+    const urlParts = videoUrl.split('/');
+    const rawName = urlParts[urlParts.length - 1].split('?')[0];
+    const name = decodeURIComponent(rawName) || `video.${ext}`;
+
+    items.push({
+      type: 'video',
+      name,
+      url: videoUrl,
+      ext,
+      label: 'video',
+      size: 0,
+      thumbnail: posterUrl
+    });
+  }
+
+  const imgRegex = /<img[^>]*src="(https?:\/\/[^"']*\.(?:jpg|jpeg|png|webp|gif))"[^>]*>/gi;
+  let imgMatch;
+  while ((imgMatch = imgRegex.exec(html)) !== null) {
+    const imgUrl = imgMatch[1];
+
+    if (seen.has(imgUrl) || !imgUrl.includes('.erome.com')) continue;
+    if (imgUrl.includes('avatar.erome.com')) continue;
+    seen.add(imgUrl);
+
+    const extMatch = imgUrl.match(/\.(\w+)(?:\?|$)/);
+    const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+    const urlParts = imgUrl.split('/');
+    const rawName = urlParts[urlParts.length - 1].split('?')[0];
+    const name = decodeURIComponent(rawName) || `image.${ext}`;
+
+    items.push({
+      type: 'image',
+      name,
+      url: imgUrl,
+      ext,
+      label: 'image',
+      size: 0,
+      thumbnail: imgUrl
     });
   }
 
@@ -523,6 +861,11 @@ async function analyzePage(url) {
   if (url.includes('bunkr.')) {
     const bkData = await scrapeBunkr(url);
     if (bkData && bkData.items.length > 0) return bkData;
+  }
+
+  if (url.includes('erome.com')) {
+    const erData = await scrapeErome(url);
+    if (erData && erData.items.length > 0) return erData;
   }
 
   // Fallback to generic extractor
@@ -552,12 +895,6 @@ async function runZipTask(taskId, items) {
 
   archive.pipe(output);
 
-  archive.on('progress', (p) => {
-    task.currentBytes = p.fs.processedBytes || 0;
-    const elapsedSec = (Date.now() - task.startTime) / 1000;
-    task.speed = elapsedSec > 0 ? Math.round(task.currentBytes / elapsedSec) : 0;
-  });
-
   archive.on('error', (err) => {
     task.status = 'error';
     task.error = err.message;
@@ -571,21 +908,40 @@ async function runZipTask(taskId, items) {
       task.currentName = item.name;
 
       try {
-        const itemRes = await fetch(item.url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          }
-        });
+        const fetchHeaders = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        };
+        if (item.url.includes('erome.com')) {
+          fetchHeaders['Referer'] = 'https://www.erome.com/';
+        }
+        const itemRes = await fetch(item.url, { headers: fetchHeaders });
 
         if (itemRes.ok) {
-          const buffer = Buffer.from(await itemRes.arrayBuffer());
-          archive.append(buffer, { name: item.name || `file_${i + 1}.${item.ext || 'bin'}` });
+          const chunks = [];
+          if (itemRes.body && typeof itemRes.body.getReader === 'function') {
+            const reader = itemRes.body.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              chunks.push(value);
+              task.currentBytes += value.length;
+              const elapsed = (Date.now() - task.startTime) / 1000;
+              task.speed = elapsed > 0 ? Math.round(task.currentBytes / elapsed) : 0;
+            }
+          } else {
+            const buffer = Buffer.from(await itemRes.arrayBuffer());
+            chunks.push(buffer);
+            task.currentBytes += buffer.length;
+          }
+          archive.append(Buffer.concat(chunks), { name: item.name || `file_${i + 1}.${item.ext || 'bin'}` });
         }
       } catch (err) {
         console.error(`Failed to fetch ${item.url} for ZIP:`, err.message);
       }
 
       task.processed = i + 1;
+      const elapsedSec = (Date.now() - task.startTime) / 1000;
+      task.speed = elapsedSec > 0 ? Math.round(task.currentBytes / elapsedSec) : 0;
     }
 
     if (task.status !== 'cancelled') {
@@ -628,6 +984,9 @@ const server = http.createServer(async (req, res) => {
         }
 
         const result = await analyzePage(body.url);
+        if (!result || !result.items || result.items.length === 0) {
+          console.warn(`[Analyze] No items found for URL: ${body.url}`);
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch (err) {
@@ -653,6 +1012,15 @@ const server = http.createServer(async (req, res) => {
       if (req.headers.range) {
         headers['Range'] = req.headers.range;
       }
+      if (targetUrl.includes('erome.com')) {
+        headers['Referer'] = 'https://www.erome.com/';
+      } else if (targetUrl.includes('cyberdrop') || targetUrl.includes('gigachad-cdn')) {
+        headers['Referer'] = 'https://cyberdrop.cr/';
+      } else if (targetUrl.includes('bunkr')) {
+        headers['Referer'] = 'https://bunkr.xxx/';
+      } else if (targetUrl.includes('pixeldrain.com')) {
+        headers['Referer'] = 'https://pixeldrain.com/';
+      }
 
       const proxyRes = await fetch(targetUrl, { headers });
       
@@ -664,8 +1032,19 @@ const server = http.createServer(async (req, res) => {
 
       res.writeHead(proxyRes.status, resHeaders);
 
-      const arrayBuffer = await proxyRes.arrayBuffer();
-      res.end(Buffer.from(arrayBuffer));
+      if (proxyRes.body && typeof proxyRes.body.getReader === 'function') {
+        const reader = proxyRes.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(Buffer.from(value));
+        }
+      } else {
+        const buffer = Buffer.from(await proxyRes.arrayBuffer());
+        res.end(buffer);
+        return;
+      }
+      res.end();
     } catch (err) {
       console.error('Proxy Error:', err);
       res.writeHead(502);

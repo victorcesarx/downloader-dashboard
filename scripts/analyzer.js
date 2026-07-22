@@ -33,18 +33,23 @@ export async function analyzeUrl(url) {
 
     const data = await res.json();
     
-    // Assign incremental ID to items for frontend state tracking
-    const items = (data.items || []).map((item, idx) => ({
-      id: `${Date.now()}_${idx}`,
-      type: item.type || 'document',
-      name: item.name || `Media_${idx + 1}`,
-      url: item.url,
-      proxyUrl: `/proxy?url=${encodeURIComponent(item.url)}`,
-      ext: item.ext || 'bin',
-      size: item.size || 0,
-      label: item.label || item.type,
-      thumbnail: item.thumbnail || null
-    }));
+    const items = (data.items || []).map((item, idx) => {
+      const thumb = item.thumbnail;
+      const proxyThumb = thumb && (thumb.includes('erome.com') || thumb.includes('cyberdrop') || thumb.includes('bunkr') || thumb.includes('pixeldrain.com'))
+        ? `/proxy?url=${encodeURIComponent(thumb)}`
+        : thumb;
+      return {
+        id: `${Date.now()}_${idx}`,
+        type: item.type || 'document',
+        name: item.name || `Media_${idx + 1}`,
+        url: item.url,
+        proxyUrl: `/proxy?url=${encodeURIComponent(item.url)}`,
+        ext: item.ext || 'bin',
+        size: item.size || 0,
+        label: item.label || item.type,
+        thumbnail: proxyThumb
+      };
+    });
 
     store.state.items = items;
     store.state.selectedItemIds.clear();

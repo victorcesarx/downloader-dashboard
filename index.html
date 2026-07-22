@@ -6,9 +6,13 @@
   <title data-i18n="app.title">DownDash - Extrator e Downloader de Mídias</title>
   <meta name="description" content="DownDash permite extrair e baixar imagens, vídeos e arquivos de qualquer site de hospedagem de forma fácil e rápida." />
   <link rel="stylesheet" href="/styles/main.css">
+  <style>
+    html:not(.i18n-ready) { visibility: hidden; }
+  </style>
   <script>
     const theme = localStorage.getItem('downdash_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', theme);
+    window.__LOCALES__ = {"pt-BR":{"app":{"title":"DownDash - Extrator e Downloader de Mídias","subtitle":"Extraia vídeos, áudios, imagens e documentos de qualquer site instantaneamente","tagline":"Cole qualquer URL e baixe mídias de forma rápida, segura e em alta qualidade.","start_now":"Começar Agora","features_link":"Recursos","supported_sites":"Sites Suportados"},"nav":{"dashboard":"Dashboard","landing":"Início","theme":"Alternar Tema","language":"Idioma"},"search":{"placeholder":"Cole aqui o link da página (ex: https://gofile.io/d/..., pixeldrain.com...)","analyze_btn":"Analisar Link","analyzing":"Analisando..."},"filters":{"all":"Todos","video":"Vídeos","image":"Imagens","audio":"Áudios","document":"Documentos","search_input":"Buscar mídias..."},"actions":{"select_all":"Selecionar Todos","deselect_all":"Desmarcar Todos","download_selected":"Baixar Selecionados (ZIP)","download":"Download","preview":"Assistir / Preview","cancel":"Cancelar","close":"Fechar","copy_link":"Copiar Link"},"views":{"grid":"Grade","list":"Lista","grid_title":"Modo Grade","list_title":"Modo Lista"},"landing":{"headline":"Baixe mídias de qualquer lugar com o <span class=\"gradient-text\">DownDash</span>","feature1_title":"Extração Ultra Rápida","feature1_desc":"Scraper inteligente capaz de identificar múltiplos formatos de mídia em segundos.","feature2_title":"Download em Lote ZIP","feature2_desc":"Selecione dezenas de mídias e receba um único arquivo ZIP compactado com progresso em tempo real.","feature3_title":"Proxy Integrado","feature3_desc":"Bypass inteligente de CORS e suporte a Range Headers para reproduzir vídeos diretamente no navegador.","footer":"DownDash - Downloader Dashboard. Todos os direitos reservados."},"status":{"empty":"Nenhuma mídia encontrada. Cole uma URL acima para começar a análise.","found_count":"{count} mídia(s) encontrada(s)","loading":"Extraindo informações e links de mídia...","downloading":"Baixando...","paused":"Pausado","error":"Ocorreu um erro ao processar o link. Verifique a URL e tente novamente."},"zip":{"title":"Download em Lote (ZIP)","preparing":"Preparando arquivos para compressão...","progress":"Processando arquivo {current} de {total}","download_ready":"Seu arquivo ZIP está pronto!","download_btn":"Baixar ZIP Agora","speed":"Velocidade: {speed}","estimated_bytes":"Tamanho processado: {bytes}"},"modal":{"preview_title":"Visualizar Mídia","unsupported_preview":"Visualização não suportada para este tipo de arquivo."},"dl":{"pause":"Pausar","resume":"Retomar","cancel":"Cancelar","complete":"Download concluído!","error":"Erro no download"},"toast":{"analyzed_success":"Mídias extraídas com sucesso!","copied":"Link copiado para a área de transferência!","download_started":"Download iniciado.","download_in_progress":"Já existe um download em andamento","zip_error":"Erro ao gerar arquivo ZIP."}},"en":{"app":{"title":"DownDash - Media Extractor & Downloader","subtitle":"Extract videos, audio, images and documents from any site instantly","tagline":"Paste any URL and download media quickly, safely, and in high quality.","start_now":"Start Now","features_link":"Features","supported_sites":"Supported Sites"},"nav":{"dashboard":"Dashboard","landing":"Home","theme":"Toggle Theme","language":"Language"},"search":{"placeholder":"Paste page link here (e.g., https://gofile.io/d/..., pixeldrain.com...)","analyze_btn":"Analyze Link","analyzing":"Analyzing..."},"filters":{"all":"All","video":"Videos","image":"Images","audio":"Audio","document":"Documents","search_input":"Search media..."},"actions":{"select_all":"Select All","deselect_all":"Deselect All","download_selected":"Download Selected (ZIP)","download":"Download","preview":"Watch / Preview","cancel":"Cancel","close":"Close","copy_link":"Copy Link"},"views":{"grid":"Grid","list":"List","grid_title":"Grid View","list_title":"List View"},"landing":{"headline":"Download media from anywhere with <span class=\"gradient-text\">DownDash</span>","feature1_title":"Ultra-Fast Extraction","feature1_desc":"Smart scraper capable of identifying multiple media formats in seconds.","feature2_title":"Batch ZIP Download","feature2_desc":"Select dozens of media files and receive a single compressed ZIP file with real-time progress.","feature3_title":"Built-in Proxy","feature3_desc":"Smart CORS bypass with Range Header support to play videos directly in the browser.","footer":"DownDash - Downloader Dashboard. All rights reserved."},"status":{"empty":"No media found. Paste a URL above to start analyzing.","found_count":"{count} media item(s) found","loading":"Extracting information and media links...","downloading":"Downloading...","paused":"Paused","error":"An error occurred while processing the link. Check the URL and try again."},"zip":{"title":"Batch Download (ZIP)","preparing":"Preparing files for compression...","progress":"Processing file {current} of {total}","download_ready":"Your ZIP file is ready!","download_btn":"Download ZIP Now","speed":"Speed: {speed}","estimated_bytes":"Processed size: {bytes}"},"modal":{"preview_title":"Media Preview","unsupported_preview":"Preview not supported for this file type."},"dl":{"pause":"Pause","resume":"Resume","cancel":"Cancel","complete":"Download complete!","error":"Download error"},"toast":{"analyzed_success":"Media extracted successfully!","copied":"Link copied to clipboard!","download_started":"Download started.","download_in_progress":"A download is already in progress","zip_error":"Error generating ZIP file."}}};
   </script>
 </head>
 <body>
@@ -25,8 +29,8 @@
       <div class="nav-actions">
         <a href="/dashboard.html" class="btn btn-primary btn-sm" data-i18n="nav.dashboard">Dashboard</a>
         <select id="lang-select" class="select-input" aria-label="Language Selector">
-          <option value="pt-BR">🇧🇷 pt-BR</option>
-          <option value="en">🇺🇸 English</option>
+          <option value="pt-BR">Português</option>
+          <option value="en">English</option>
         </select>
         <label class="theme-toggle" aria-label="Toggle Theme">
           <input type="checkbox" id="theme-toggle-input" />
@@ -38,7 +42,7 @@
 
   <main class="container" style="padding-top: 80px; padding-bottom: 80px;">
     <div style="text-align: center; max-width: 800px; margin: 0 auto;">
-      <h1 style="font-size: 3.5rem; margin-bottom: 24px; line-height: 1.1;">
+      <h1 style="font-size: 3.5rem; margin-bottom: 24px; line-height: 1.1;" data-i18n-html="landing.headline">
         Baixe mídias de qualquer lugar com o <span class="gradient-text">DownDash</span>
       </h1>
       <p style="font-size: 1.25rem; color: var(--text-secondary); margin-bottom: 40px; line-height: 1.6;" data-i18n="app.tagline">
@@ -56,30 +60,48 @@
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-top: 40px;">
       <div style="background: var(--bg-card); border: 1px solid var(--glass-border); padding: 32px; border-radius: var(--radius-lg); backdrop-filter: blur(16px);">
         <div style="font-size: 2.5rem; margin-bottom: 16px;">🚀</div>
-        <h3 style="margin-bottom: 12px; font-size: 1.3rem;">Extração Ultra Rápida</h3>
-        <p style="color: var(--text-secondary);">Scraper inteligente capaz de identificar múltiplos formatos de mídia em segundos.</p>
+        <h3 style="margin-bottom: 12px; font-size: 1.3rem;" data-i18n="landing.feature1_title">Extração Ultra Rápida</h3>
+        <p style="color: var(--text-secondary);" data-i18n="landing.feature1_desc">Scraper inteligente capaz de identificar múltiplos formatos de mídia em segundos.</p>
       </div>
 
       <div style="background: var(--bg-card); border: 1px solid var(--glass-border); padding: 32px; border-radius: var(--radius-lg); backdrop-filter: blur(16px);">
         <div style="font-size: 2.5rem; margin-bottom: 16px;">📦</div>
-        <h3 style="margin-bottom: 12px; font-size: 1.3rem;">Download em Lote ZIP</h3>
-        <p style="color: var(--text-secondary);">Selecione dezenas de mídias e receba um único arquivo ZIP compactado com progresso em tempo real.</p>
+        <h3 style="margin-bottom: 12px; font-size: 1.3rem;" data-i18n="landing.feature2_title">Download em Lote ZIP</h3>
+        <p style="color: var(--text-secondary);" data-i18n="landing.feature2_desc">Selecione dezenas de mídias e receba um único arquivo ZIP compactado com progresso em tempo real.</p>
       </div>
 
       <div style="background: var(--bg-card); border: 1px solid var(--glass-border); padding: 32px; border-radius: var(--radius-lg); backdrop-filter: blur(16px);">
         <div style="font-size: 2.5rem; margin-bottom: 16px;">🛡️</div>
-        <h3 style="margin-bottom: 12px; font-size: 1.3rem;">Proxy Integrado</h3>
-        <p style="color: var(--text-secondary);">Bypass inteligente de CORS e suporte a Range Headers para reproduzir vídeos diretamente no navegador.</p>
+        <h3 style="margin-bottom: 12px; font-size: 1.3rem;" data-i18n="landing.feature3_title">Proxy Integrado</h3>
+        <p style="color: var(--text-secondary);" data-i18n="landing.feature3_desc">Bypass inteligente de CORS e suporte a Range Headers para reproduzir vídeos diretamente no navegador.</p>
       </div>
     </div>
   </main>
 
   <footer class="footer">
     <div class="container">
-      <p>&copy; 2026 DownDash - Downloader Dashboard. Todos os direitos reservados.</p>
+      <p data-i18n="landing.footer">&copy; 2026 DownDash - Downloader Dashboard. Todos os direitos reservados.</p>
     </div>
   </footer>
 
+  <script>
+    (function(){
+      var lang = localStorage.getItem('downdash_lang');
+      if (!lang) lang = navigator.language && navigator.language.startsWith('pt') ? 'pt-BR' : 'en';
+      var dict = (window.__LOCALES__ || {})[lang];
+      if (!dict) return;
+      function resolve(key) {
+        var parts = key.split('.'), val = dict;
+        for (var i = 0; val && i < parts.length; i++) val = val[parts[i]];
+        return typeof val === 'string' ? val : key;
+      }
+      document.querySelectorAll('[data-i18n]').forEach(function(el){ el.textContent = resolve(el.getAttribute('data-i18n')); });
+      document.querySelectorAll('[data-i18n-html]').forEach(function(el){ el.innerHTML = resolve(el.getAttribute('data-i18n-html')); });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el){ el.placeholder = resolve(el.getAttribute('data-i18n-placeholder')); });
+      document.querySelectorAll('[data-i18n-title]').forEach(function(el){ el.title = resolve(el.getAttribute('data-i18n-title')); });
+      document.documentElement.classList.add('i18n-ready');
+    })();
+  </script>
   <script type="module" src="/scripts/app.js"></script>
 </body>
 </html>

@@ -2,7 +2,7 @@
  * Main Application Controller (app.js)
  */
 import { store } from './state.js';
-import { initI18n, loadLocale, translateDOM } from './i18n.js';
+import { initI18n, loadLocale, t } from './i18n.js';
 import { analyzeUrl } from './analyzer.js';
 import { renderMediaContainer, updateBatchActionsUI } from './renderer.js';
 import { startZipDownload } from './zip-download.js';
@@ -114,7 +114,14 @@ function setupEventListeners() {
 
   if (selectAllBtn) {
     selectAllBtn.addEventListener('click', () => {
-      store.state.items.forEach(item => store.state.selectedItemIds.add(item.id));
+      const { items, activeFilter, searchQuery } = store.state;
+      items.forEach(item => {
+        const matchesFilter = activeFilter === 'all' || item.type === activeFilter;
+        const matchesSearch = !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase());
+        if (matchesFilter && matchesSearch) {
+          store.state.selectedItemIds.add(item.id);
+        }
+      });
       renderMediaContainer();
       updateBatchActionsUI();
     });
@@ -142,7 +149,7 @@ function setupEventListeners() {
       const analyzeBtn = document.getElementById('analyze-btn');
       if (analyzeBtn) {
         analyzeBtn.disabled = store.state.isAnalyzing;
-        analyzeBtn.textContent = store.state.isAnalyzing ? 'Analisando...' : 'Analisar Link';
+        analyzeBtn.textContent = store.state.isAnalyzing ? t('search.analyzing') : t('search.analyze_btn');
       }
       renderMediaContainer();
     }

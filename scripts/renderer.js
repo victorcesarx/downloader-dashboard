@@ -2,14 +2,15 @@
  * DOM Renderer Module (renderer.js)
  */
 import { store } from './state.js';
-import { formatBytes, sanitizeHtml } from './utils.js';
+import { formatBytes, sanitizeHtml, estimateFileSize } from './utils.js';
 import { t } from './i18n.js';
 import { downloadSingleItem } from './download.js';
 
 export function renderSkeletons(container, count = 6) {
   if (!container) return;
   const isGrid = store.state.viewMode === 'grid';
-  container.className = `media-container ${isGrid ? 'grid-view' : 'list-view'}`;
+  container.classList.toggle('grid-view', isGrid);
+  container.classList.toggle('list-view', !isGrid);
   
   let html = '';
   for (let i = 0; i < count; i++) {
@@ -23,7 +24,7 @@ export function renderMediaContainer() {
   const countEl = document.getElementById('found-count');
   if (!container) return;
 
-  const { items, activeFilter, searchQuery, viewMode, selectedItemIds, isAnalyzing } = store.state;
+  const { items, activeFilter, searchQuery, viewMode, selectedItemIds, isAnalyzing, thumbBlurred } = store.state;
 
   if (isAnalyzing) {
     renderSkeletons(container);
@@ -43,7 +44,7 @@ export function renderMediaContainer() {
   }
 
   if (filtered.length === 0) {
-    container.className = 'media-container';
+    container.classList.remove('grid-view', 'list-view');
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">📂</div>
@@ -53,7 +54,8 @@ export function renderMediaContainer() {
     return;
   }
 
-  container.className = `media-container ${viewMode === 'grid' ? 'grid-view' : 'list-view'}`;
+  container.classList.toggle('grid-view', viewMode === 'grid');
+  container.classList.toggle('list-view', viewMode === 'list');
 
   const cardsHtml = filtered.map(item => {
     const isSelected = selectedItemIds.has(item.id);
@@ -83,6 +85,11 @@ export function renderMediaContainer() {
           <div class="card-meta">
             <span>${item.ext ? item.ext.toUpperCase() : ''}</span>
             <span>${formatBytes(item.size)}</span>
+            ${item.qualities && item.qualities.length > 1 ? `
+              <select class="quality-select" data-id="${item.id}">
+                ${item.qualities.map((q, i) => `<option value="${i}" ${i === item.selectedQualityIndex ? 'selected' : ''}>${q.label}</option>`).join('')}
+              </select>
+            ` : ''}
           </div>
           <div class="card-actions">
             ${(item.type === 'video' || item.type === 'image' || item.type === 'audio') ? `
@@ -96,6 +103,40 @@ export function renderMediaContainer() {
   }).join('');
 
   container.innerHTML = cardsHtml;
+
+  // Apply blur after render so CSS transition animates smoothly
+  requestAnimationFrame(() => {
+    container.classList.toggle('thumb-blurred', store.state.thumbBlurred);
+  });
+
+  // Lazy size fetch for items with unknown size
+  requestAnimationFrame(() => {
+    items.forEach(item => {
+      if (item.size) return;
+      const card = container.querySelector(`.media-card[data-id="${item.id}"]`);
+      const sizeEl = card?.querySelector('.card-meta span:last-child');
+      if (!sizeEl) return;
+      const url = item.proxyUrl || item.url;
+      if (!url) return;
+      fetch(url, { headers: { Range: 'bytes=0-0' } }).then(r => {
+        const cr = r.headers.get('content-range');
+        let s = 0;
+        if (cr) {
+          const m = cr.match(/\/(\d+)$/);
+          if (m) s = parseInt(m[1], 10);
+        }
+        if (!s) {
+          const cl = r.headers.get('content-length');
+          if (cl) s = parseInt(cl, 10);
+        }
+        if (s) {
+          item.size = s;
+          sizeEl.textContent = formatBytes(s);
+        }
+      }).catch(() => {});
+    });
+  });
+
   attachCardEvents(container);
 }
 
@@ -104,11 +145,13 @@ function attachCardEvents(container) {
   container.querySelectorAll('.card-checkbox').forEach(cb => {
     cb.addEventListener('change', (e) => {
       const id = e.target.getAttribute('data-id');
+      const next = new Set(store.state.selectedItemIds);
       if (e.target.checked) {
-        store.state.selectedItemIds.add(id);
+        next.add(id);
       } else {
-        store.state.selectedItemIds.delete(id);
+        next.delete(id);
       }
+      store.state.selectedItemIds = next;
       renderMediaContainer();
       updateBatchActionsUI();
     });
@@ -126,6 +169,34 @@ function attachCardEvents(container) {
           downloadSingleItem(item, cardEl);
         }
       }
+    });
+  });
+
+  // Quality selector
+  container.querySelectorAll('.quality-select').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const id = e.target.getAttribute('data-id');
+      const item = store.state.items.find(i => i.id === id);
+      if (!item || !item.qualities) return;
+      const idx = parseInt(e.target.value, 10);
+      const q = item.qualities[idx];
+      if (!q) return;
+      item.selectedQualityIndex = idx;
+      item.url = q.url;
+      item.proxyUrl = q.proxyUrl;
+      if (q.size > 0) {
+        item.size = q.size;
+      } else {
+        item.size = estimateFileSize(q.width, q.height);
+        fetch(q.proxyUrl, { headers: { Range: 'bytes=0-0' } }).then(r => {
+          const cr = r.headers.get('content-range');
+          if (cr) {
+            const m = cr.match(/\/(\d+)$/);
+            if (m) { item.size = parseInt(m[1], 10); renderMediaContainer(); }
+          }
+        }).catch(() => {});
+      }
+      renderMediaContainer();
     });
   });
 

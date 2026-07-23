@@ -2,7 +2,7 @@
  * Batch ZIP Downloader Module (zip-download.js)
  */
 import { store } from './state.js';
-import { Toast, formatBytes, formatSpeed } from './utils.js';
+import { Toast, formatBytes, formatSpeed, formatDuration, apiFetch } from './utils.js';
 import { t } from './i18n.js';
 
 let pollingInterval = null;
@@ -32,7 +32,7 @@ export async function startZipDownload() {
   };
 
   try {
-    const res = await fetch('/download-zip', {
+    const res = await apiFetch('/download-zip', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -86,6 +86,7 @@ function renderZipPanel(taskId, totalFiles, totalBytes) {
     </div>
     <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted);">
       <span id="zip-speed">0 B/s</span>
+      <span id="zip-eta"></span>
       <span id="zip-processed-bytes">0 B</span>
     </div>
     <div id="zip-action-area" style="margin-top:4px;"></div>
@@ -103,7 +104,7 @@ function startPollingStatus(taskId) {
 
   pollingInterval = setInterval(async () => {
     try {
-      const res = await fetch(`/download-zip/status/${taskId}`);
+      const res = await apiFetch(`/download-zip/status/${taskId}`);
       if (!res.ok) return;
 
       const data = await res.json();
@@ -121,7 +122,7 @@ function startPollingStatus(taskId) {
     } catch (err) {
       console.error('Polling error:', err);
     }
-  }, 300);
+  }, 1000);
 }
 
 function renderZipStatusText(current, total, totalBytes) {
@@ -132,6 +133,7 @@ function updateZipPanelUI(taskId, data) {
   const statusText = document.getElementById('zip-status-text');
   const progressBar = document.getElementById('zip-progress-bar');
   const speedEl = document.getElementById('zip-speed');
+  const etaEl = document.getElementById('zip-eta');
   const bytesEl = document.getElementById('zip-processed-bytes');
 
   if (!statusText) return;
@@ -140,10 +142,18 @@ function updateZipPanelUI(taskId, data) {
   const total = data.total || 1;
   const percent = Math.round((current / total) * 100);
   const totalBytes = parseInt(statusText.getAttribute('data-total-bytes') || '0', 10);
+  const speed = data.speed || 0;
 
   statusText.textContent = renderZipStatusText(current, total, totalBytes);
   if (progressBar) progressBar.style.width = `${percent}%`;
-  if (speedEl) speedEl.textContent = formatSpeed(data.speed || 0);
+  if (speedEl) speedEl.textContent = formatSpeed(speed);
+
+  // ETA: remaining bytes / speed
+  const remaining = Math.max(0, totalBytes - (data.currentBytes || 0));
+  if (etaEl) {
+    etaEl.textContent = remaining > 0 && speed > 0 ? `~${formatDuration(remaining / speed)}` : '';
+  }
+
   if (bytesEl) bytesEl.textContent = formatBytes(data.currentBytes || 0);
 }
 
@@ -165,11 +175,17 @@ function onZipCompleted(taskId) {
   if (progressBar) progressBar.style.width = '100%';
 
   if (actionArea) {
+    const token = localStorage.getItem('downdash_token');
+    const resultUrl = `/download-zip/result/${taskId}${token ? `?token=${token}` : ''}`;
     actionArea.innerHTML = `
-      <a href="/download-zip/result/${taskId}" class="btn btn-primary btn-sm" style="width:100%;" download="downdash_media_pack.zip">
+      <a href="${resultUrl}" class="btn btn-primary btn-sm" style="width:100%;" download="webscope_media_pack.zip">
         ${t('zip.download_btn')}
       </a>
     `;
+    const link = actionArea.querySelector('a');
+    link.addEventListener('click', () => {
+      setTimeout(removeZipPanel, 2000);
+    });
   }
 }
 
@@ -177,12 +193,16 @@ async function cancelZipTask(taskId) {
   resetZipState();
   if (pollingInterval) clearInterval(pollingInterval);
   try {
-    await fetch(`/download-zip/cancel/${taskId}`);
+    await apiFetch(`/download-zip/cancel/${taskId}`);
   } catch (e) {}
   removeZipPanel();
 }
 
 function removeZipPanel() {
   const panel = document.getElementById('zip-panel');
-  if (panel) panel.remove();
+  if (!panel) return;
+  panel.classList.add('closing');
+  setTimeout(() => {
+    if (panel.parentNode) panel.remove();
+  }, 400);
 }

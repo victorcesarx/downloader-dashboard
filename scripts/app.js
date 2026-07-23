@@ -57,6 +57,7 @@ function setupEventListeners() {
   // URL Analyze Form
   const analyzeForm = document.getElementById('analyze-form');
   const urlInput = document.getElementById('url-input');
+  const searchWrapper = document.querySelector('.search-box-wrapper');
   if (analyzeForm && urlInput) {
     analyzeForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -67,6 +68,28 @@ function setupEventListeners() {
         updateBatchActionsUI();
       }
     });
+
+    // Drag-and-drop URL onto search area
+    if (searchWrapper) {
+      searchWrapper.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        searchWrapper.classList.add('drag-over');
+      });
+
+      searchWrapper.addEventListener('dragleave', () => {
+        searchWrapper.classList.remove('drag-over');
+      });
+
+      searchWrapper.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        searchWrapper.classList.remove('drag-over');
+        const text = e.dataTransfer.getData('text');
+        if (text && (text.startsWith('http://') || text.startsWith('https://'))) {
+          urlInput.value = text;
+          analyzeForm.dispatchEvent(new Event('submit'));
+        }
+      });
+    }
   }
 
   // Filter Pills
@@ -108,6 +131,18 @@ function setupEventListeners() {
     });
   }
 
+  // NSFW Blur Toggle (square button)
+  const nsfwBtn = document.getElementById('nsfw-btn');
+  if (nsfwBtn) {
+    nsfwBtn.classList.toggle('active', store.state.thumbBlurred);
+    nsfwBtn.addEventListener('click', () => {
+      store.state.thumbBlurred = !store.state.thumbBlurred;
+      nsfwBtn.classList.toggle('active', store.state.thumbBlurred);
+      localStorage.setItem('downdash_blur', store.state.thumbBlurred);
+      renderMediaContainer();
+    });
+  }
+
   // Select / Deselect All
   const selectAllBtn = document.getElementById('select-all-btn');
   const deselectAllBtn = document.getElementById('deselect-all-btn');
@@ -115,13 +150,15 @@ function setupEventListeners() {
   if (selectAllBtn) {
     selectAllBtn.addEventListener('click', () => {
       const { items, activeFilter, searchQuery } = store.state;
+      const next = new Set(store.state.selectedItemIds);
       items.forEach(item => {
         const matchesFilter = activeFilter === 'all' || item.type === activeFilter;
         const matchesSearch = !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase());
         if (matchesFilter && matchesSearch) {
-          store.state.selectedItemIds.add(item.id);
+          next.add(item.id);
         }
       });
+      store.state.selectedItemIds = next;
       renderMediaContainer();
       updateBatchActionsUI();
     });
@@ -129,7 +166,7 @@ function setupEventListeners() {
 
   if (deselectAllBtn) {
     deselectAllBtn.addEventListener('click', () => {
-      store.state.selectedItemIds.clear();
+      store.state.selectedItemIds = new Set();
       renderMediaContainer();
       updateBatchActionsUI();
     });

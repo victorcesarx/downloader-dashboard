@@ -1,4 +1,4 @@
-import { Toast, formatBytes, formatSpeed } from './utils.js';
+import { Toast, formatBytes, formatSpeed, apiFetch } from './utils.js';
 import { t } from './i18n.js';
 
 let activeDownload = null;
@@ -54,7 +54,7 @@ async function executeDownload() {
   if (!ad) return;
 
   try {
-    const res = await fetch(ad.item.proxyUrl, { signal: ad.controller.signal });
+    const res = await apiFetch(ad.item.proxyUrl, { signal: ad.controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const contentLength = res.headers.get('content-length');

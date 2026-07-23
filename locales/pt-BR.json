@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "DownDash - Extrator e Downloader de Mídias",
+    "title": "WebScope - Extrator e Downloader de Mídias",
     "subtitle": "Extraia vídeos, áudios, imagens e documentos de qualquer site instantaneamente",
     "tagline": "Cole qualquer URL e baixe mídias de forma rápida, segura e em alta qualidade.",
     "start_now": "Começar Agora",
@@ -43,14 +43,14 @@
     "list_title": "Modo Lista"
   },
   "landing": {
-    "headline": "Baixe mídias de qualquer lugar com o <span class=\"gradient-text\">DownDash</span>",
+    "headline": "Baixe mídias de qualquer lugar com o <span class=\"gradient-text\">WebScope</span>",
     "feature1_title": "Extração Ultra Rápida",
     "feature1_desc": "Scraper inteligente capaz de identificar múltiplos formatos de mídia em segundos.",
     "feature2_title": "Download em Lote ZIP",
     "feature2_desc": "Selecione dezenas de mídias e receba um único arquivo ZIP compactado com progresso em tempo real.",
     "feature3_title": "Proxy Integrado",
     "feature3_desc": "Bypass inteligente de CORS e suporte a Range Headers para reproduzir vídeos diretamente no navegador.",
-    "footer": "DownDash - Downloader Dashboard. Todos os direitos reservados."
+    "footer": "WebScope - Downloader Dashboard. Todos os direitos reservados."
   },
   "status": {
     "empty": "Nenhuma mídia encontrada. Cole uma URL acima para começar a análise.",

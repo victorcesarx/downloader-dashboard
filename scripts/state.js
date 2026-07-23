@@ -9,6 +9,7 @@ const initialState = {
   activeFilter: 'all',
   searchQuery: '',
   viewMode: 'grid', // 'grid' | 'list'
+  thumbBlurred: localStorage.getItem('downdash_blur') === 'true',
   theme: localStorage.getItem('downdash_theme') || 'dark',
   lang: localStorage.getItem('downdash_lang') || (navigator.language.startsWith('pt') ? 'pt-BR' : 'en'),
   isAnalyzing: false,

@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "DownDash - Media Extractor & Downloader",
+    "title": "WebScope - Media Extractor & Downloader",
     "subtitle": "Extract videos, audio, images and documents from any site instantly",
     "tagline": "Paste any URL and download media quickly, safely, and in high quality.",
     "start_now": "Start Now",
@@ -43,14 +43,14 @@
     "list_title": "List View"
   },
   "landing": {
-    "headline": "Download media from anywhere with <span class=\"gradient-text\">DownDash</span>",
+    "headline": "Download media from anywhere with <span class=\"gradient-text\">WebScope</span>",
     "feature1_title": "Ultra-Fast Extraction",
     "feature1_desc": "Smart scraper capable of identifying multiple media formats in seconds.",
     "feature2_title": "Batch ZIP Download",
     "feature2_desc": "Select dozens of media files and receive a single compressed ZIP file with real-time progress.",
     "feature3_title": "Built-in Proxy",
     "feature3_desc": "Smart CORS bypass with Range Header support to play videos directly in the browser.",
-    "footer": "DownDash - Downloader Dashboard. All rights reserved."
+    "footer": "WebScope - Downloader Dashboard. All rights reserved."
   },
   "status": {
     "empty": "No media found. Paste a URL above to start analyzing.",

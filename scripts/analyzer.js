@@ -7,7 +7,7 @@ import { t } from './i18n.js';
 
 export async function analyzeUrl(url) {
   if (!url || typeof url !== 'string' || !url.trim()) {
-    Toast.show('URL inválida', 'warning');
+    Toast.show(t('toast.invalid_url'), 'warning');
     return null;
   }
 

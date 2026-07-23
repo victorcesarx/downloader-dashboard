@@ -5,18 +5,22 @@
     "tagline": "Cole qualquer URL e baixe mídias de forma rápida, segura e em alta qualidade.",
     "start_now": "Começar Agora",
     "features_link": "Recursos",
-    "supported_sites": "Sites Suportados"
+    "supported_sites": "Sites Suportados",
+    "description": "WebScope permite extrair e baixar imagens, vídeos e arquivos de qualquer site de hospedagem de forma fácil e rápida."
   },
   "nav": {
     "dashboard": "Dashboard",
     "landing": "Início",
     "theme": "Alternar Tema",
-    "language": "Idioma"
+    "language": "Idioma",
+    "language_label": "Seletor de Idioma",
+    "theme_label": "Alternar Tema"
   },
   "search": {
     "placeholder": "Cole aqui o link da página (ex: https://gofile.io/d/..., pixeldrain.com...)",
     "analyze_btn": "Analisar Link",
-    "analyzing": "Analisando..."
+    "analyzing": "Analisando...",
+    "drop_here": "Solte a URL aqui"
   },
   "filters": {
     "all": "Todos",
@@ -34,7 +38,8 @@
     "preview": "Assistir / Preview",
     "cancel": "Cancelar",
     "close": "Fechar",
-    "copy_link": "Copiar Link"
+    "copy_link": "Copiar Link",
+    "nsfw_title": "Alternar desfoque NSFW"
   },
   "views": {
     "grid": "Grade",
@@ -50,7 +55,7 @@
     "feature2_desc": "Selecione dezenas de mídias e receba um único arquivo ZIP compactado com progresso em tempo real.",
     "feature3_title": "Proxy Integrado",
     "feature3_desc": "Bypass inteligente de CORS e suporte a Range Headers para reproduzir vídeos diretamente no navegador.",
-    "footer": "WebScope - Downloader Dashboard. Todos os direitos reservados."
+    "footer": "WebScope - Downloader Dashboard. Desenvolvido com Node.js puro & Vanilla JS."
   },
   "status": {
     "empty": "Nenhuma mídia encontrada. Cole uma URL acima para começar a análise.",
@@ -58,7 +63,8 @@
     "loading": "Extraindo informações e links de mídia...",
     "downloading": "Baixando...",
     "paused": "Pausado",
-    "error": "Ocorreu um erro ao processar o link. Verifique a URL e tente novamente."
+    "error": "Ocorreu um erro ao processar o link. Verifique a URL e tente novamente.",
+    "filter_empty": "Nenhum resultado para os filtros atuais."
   },
   "zip": {
     "title": "Download em Lote (ZIP)",
@@ -67,7 +73,9 @@
     "download_ready": "Seu arquivo ZIP está pronto!",
     "download_btn": "Baixar ZIP Agora",
     "speed": "Velocidade: {speed}",
-    "estimated_bytes": "Tamanho processado: {bytes}"
+    "estimated_bytes": "Tamanho processado: {bytes}",
+    "start_error": "Falha ao iniciar empacotamento ZIP",
+    "task_error": "Task cancelada ou com erro"
   },
   "modal": {
     "preview_title": "Visualizar Mídia",
@@ -85,6 +93,8 @@
     "copied": "Link copiado para a área de transferência!",
     "download_started": "Download iniciado.",
     "download_in_progress": "Já existe um download em andamento",
-    "zip_error": "Erro ao gerar arquivo ZIP."
+    "zip_error": "Erro ao gerar arquivo ZIP.",
+    "invalid_url": "URL inválida",
+    "no_media_selected": "Nenhuma mídia selecionada."
   }
 }

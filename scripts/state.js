@@ -10,7 +10,7 @@ const initialState = {
   searchQuery: '',
   viewMode: 'grid', // 'grid' | 'list'
   thumbBlurred: localStorage.getItem('downdash_blur') === 'true',
-  theme: localStorage.getItem('downdash_theme') || 'dark',
+  theme: localStorage.getItem('downdash_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
   lang: localStorage.getItem('downdash_lang') || (navigator.language.startsWith('pt') ? 'pt-BR' : 'en'),
   isAnalyzing: false,
   activeZipTask: null

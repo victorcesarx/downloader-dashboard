@@ -1,47 +1,38 @@
-/**
- * Batch ZIP Downloader Module (zip-download.js)
- */
 import { store } from './state.js';
 import { Toast, formatBytes, formatSpeed, formatDuration, apiFetch } from './utils.js';
 import { t } from './i18n.js';
 
-let pollingInterval = null;
-let isZipping = false;
+const activeTasks = new Map();
+const pollingIntervals = new Map();
 
 export async function startZipDownload() {
-  if (isZipping) return;
-  isZipping = true;
-
   const { items, selectedItemIds } = store.state;
   const selectedItems = items.filter(i => selectedItemIds.has(i.id));
 
   if (selectedItems.length === 0) {
-    isZipping = false;
-    Toast.show('Nenhuma mídia selecionada.', 'warning');
+    Toast.show(t('toast.no_media_selected'), 'warning');
     return;
   }
-
-  disableZipButton();
-
-  const payload = {
-    items: selectedItems.map(item => ({
-      name: item.name,
-      url: item.url,
-      ext: item.ext
-    }))
-  };
 
   try {
     const res = await apiFetch('/download-zip', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        items: selectedItems.map(item => ({
+          name: item.name,
+          url: item.url,
+          ext: item.ext
+        }))
+      })
     });
 
-    if (!res.ok) throw new Error('Falha ao iniciar empacotamento ZIP');
+    if (!res.ok) throw new Error(t('zip.start_error'));
 
     const data = await res.json();
     const taskId = data.taskId;
+
+    activeTasks.set(taskId, true);
 
     const totalBytes = selectedItems.reduce((sum, i) => sum + (i.size || 0), 0);
     renderZipPanel(taskId, selectedItems.length, totalBytes);
@@ -49,47 +40,36 @@ export async function startZipDownload() {
   } catch (err) {
     console.error('ZIP start error:', err);
     Toast.show(t('toast.zip_error'), 'error');
-    isZipping = false;
-    enableZipButton();
-  }
-}
-
-function disableZipButton() {
-  const btn = document.getElementById('download-selected-btn');
-  if (btn) btn.disabled = true;
-}
-
-function enableZipButton() {
-  const btn = document.getElementById('download-selected-btn');
-  if (btn) {
-    const count = store.state.selectedItemIds.size;
-    btn.disabled = count === 0;
   }
 }
 
 function renderZipPanel(taskId, totalFiles, totalBytes) {
-  const oldPanel = document.getElementById('zip-panel');
-  if (oldPanel) oldPanel.remove();
-
   const panel = document.createElement('div');
-  panel.id = 'zip-panel';
+  panel.id = `zip-panel-${taskId}`;
   panel.className = 'zip-panel';
+  panel.dataset.taskId = taskId;
+
+  // Stack panels vertically — offset by existing panels
+  const existing = document.querySelectorAll('.zip-panel:not(.closing)');
+  const offset = existing.length * 175;
+  panel.style.bottom = `${24 + offset}px`;
 
   panel.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:center;">
       <h4 style="font-size:1.1rem; color:var(--text-primary);">${t('zip.title')}</h4>
-      <button class="btn btn-icon btn-sm cancel-zip-btn" style="width:28px; height:28px;">&times;</button>
+      <button class="cancel-zip-btn">&times;</button>
     </div>
-    <div id="zip-status-text" style="font-size:0.9rem; color:var(--text-secondary);" data-total-bytes="${totalBytes}">${renderZipStatusText(0, totalFiles, totalBytes)}</div>
-    <div class="progress-bar-container">
-      <div id="zip-progress-bar" class="progress-bar-fill" style="width:0%"></div>
+    <div class="zip-status-text" style="font-size:0.9rem; color:var(--text-secondary);" data-total-bytes="${totalBytes}">${renderZipStatusText(0, totalFiles, totalBytes)}</div>
+    <div class="zip-progress-wrap">
+      <div class="progress-bar-container">
+        <div class="zip-progress-bar progress-bar-fill" style="width:0%"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted);">
+        <span class="zip-speed">0 B/s</span>
+        <span class="zip-eta"></span>
+        <span class="zip-processed-bytes">0 B</span>
+      </div>
     </div>
-    <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted);">
-      <span id="zip-speed">0 B/s</span>
-      <span id="zip-eta"></span>
-      <span id="zip-processed-bytes">0 B</span>
-    </div>
-    <div id="zip-action-area" style="margin-top:4px;"></div>
   `;
 
   document.body.appendChild(panel);
@@ -100,9 +80,7 @@ function renderZipPanel(taskId, totalFiles, totalBytes) {
 }
 
 function startPollingStatus(taskId) {
-  if (pollingInterval) clearInterval(pollingInterval);
-
-  pollingInterval = setInterval(async () => {
+  const interval = setInterval(async () => {
     try {
       const res = await apiFetch(`/download-zip/status/${taskId}`);
       if (!res.ok) return;
@@ -111,18 +89,22 @@ function startPollingStatus(taskId) {
       updateZipPanelUI(taskId, data);
 
       if (data.status === 'completed') {
-        clearInterval(pollingInterval);
+        clearInterval(interval);
+        pollingIntervals.delete(taskId);
         onZipCompleted(taskId);
       } else if (data.status === 'error' || data.status === 'cancelled') {
-        clearInterval(pollingInterval);
-        resetZipState();
-        Toast.show(data.error || 'Task cancelada ou com erro', 'error');
-        removeZipPanel();
+        clearInterval(interval);
+        pollingIntervals.delete(taskId);
+        activeTasks.delete(taskId);
+        Toast.show(data.error || t('zip.task_error'), 'error');
+        removeZipPanel(taskId);
       }
     } catch (err) {
       console.error('Polling error:', err);
     }
   }, 1000);
+
+  pollingIntervals.set(taskId, interval);
 }
 
 function renderZipStatusText(current, total, totalBytes) {
@@ -130,11 +112,14 @@ function renderZipStatusText(current, total, totalBytes) {
 }
 
 function updateZipPanelUI(taskId, data) {
-  const statusText = document.getElementById('zip-status-text');
-  const progressBar = document.getElementById('zip-progress-bar');
-  const speedEl = document.getElementById('zip-speed');
-  const etaEl = document.getElementById('zip-eta');
-  const bytesEl = document.getElementById('zip-processed-bytes');
+  const panel = document.getElementById(`zip-panel-${taskId}`);
+  if (!panel) return;
+
+  const statusText = panel.querySelector('.zip-status-text');
+  const progressBar = panel.querySelector('.zip-progress-bar');
+  const speedEl = panel.querySelector('.zip-speed');
+  const etaEl = panel.querySelector('.zip-eta');
+  const bytesEl = panel.querySelector('.zip-processed-bytes');
 
   if (!statusText) return;
 
@@ -148,7 +133,6 @@ function updateZipPanelUI(taskId, data) {
   if (progressBar) progressBar.style.width = `${percent}%`;
   if (speedEl) speedEl.textContent = formatSpeed(speed);
 
-  // ETA: remaining bytes / speed
   const remaining = Math.max(0, totalBytes - (data.currentBytes || 0));
   if (etaEl) {
     etaEl.textContent = remaining > 0 && speed > 0 ? `~${formatDuration(remaining / speed)}` : '';
@@ -157,52 +141,59 @@ function updateZipPanelUI(taskId, data) {
   if (bytesEl) bytesEl.textContent = formatBytes(data.currentBytes || 0);
 }
 
-function resetZipState() {
-  isZipping = false;
-  enableZipButton();
-}
-
 function onZipCompleted(taskId) {
-  resetZipState();
-  const statusText = document.getElementById('zip-status-text');
-  const actionArea = document.getElementById('zip-action-area');
-  const progressBar = document.getElementById('zip-progress-bar');
+  activeTasks.delete(taskId);
+  const panel = document.getElementById(`zip-panel-${taskId}`);
+  if (!panel) return;
+
+  const statusText = panel.querySelector('.zip-status-text');
+  const progressWrap = panel.querySelector('.zip-progress-wrap');
 
   if (statusText) {
     const totalBytes = parseInt(statusText.getAttribute('data-total-bytes') || '0', 10);
     statusText.textContent = `${t('zip.download_ready')} — ${formatBytes(totalBytes)}`;
   }
-  if (progressBar) progressBar.style.width = '100%';
 
-  if (actionArea) {
+  if (progressWrap) {
     const token = localStorage.getItem('downdash_token');
     const resultUrl = `/download-zip/result/${taskId}${token ? `?token=${token}` : ''}`;
-    actionArea.innerHTML = `
+    progressWrap.innerHTML = `
       <a href="${resultUrl}" class="btn btn-primary btn-sm" style="width:100%;" download="webscope_media_pack.zip">
         ${t('zip.download_btn')}
       </a>
     `;
-    const link = actionArea.querySelector('a');
-    link.addEventListener('click', () => {
-      setTimeout(removeZipPanel, 2000);
+    progressWrap.querySelector('a').addEventListener('click', () => {
+      setTimeout(() => removeZipPanel(taskId), 2000);
     });
   }
 }
 
 async function cancelZipTask(taskId) {
-  resetZipState();
-  if (pollingInterval) clearInterval(pollingInterval);
+  activeTasks.delete(taskId);
+  const interval = pollingIntervals.get(taskId);
+  if (interval) {
+    clearInterval(interval);
+    pollingIntervals.delete(taskId);
+  }
   try {
     await apiFetch(`/download-zip/cancel/${taskId}`);
   } catch (e) {}
-  removeZipPanel();
+  removeZipPanel(taskId);
 }
 
-function removeZipPanel() {
-  const panel = document.getElementById('zip-panel');
+function removeZipPanel(taskId) {
+  const panel = document.getElementById(`zip-panel-${taskId}`);
   if (!panel) return;
   panel.classList.add('closing');
   setTimeout(() => {
     if (panel.parentNode) panel.remove();
+    restackZipPanels();
   }, 400);
+}
+
+function restackZipPanels() {
+  const panels = document.querySelectorAll('.zip-panel:not(.closing)');
+  panels.forEach((p, i) => {
+    p.style.bottom = `${24 + i * 175}px`;
+  });
 }

@@ -1,28 +1,31 @@
 import { Toast, formatBytes, formatSpeed, apiFetch } from './utils.js';
 import { t } from './i18n.js';
 
-let activeDownload = null;
+const activeDownloads = new Map();
 
 export function downloadFile(item, cardEl) {
-  if (activeDownload) {
+  if (activeDownloads.has(item.id)) {
     Toast.show(t('toast.download_in_progress'), 'warning');
     return;
   }
 
   const controller = new AbortController();
-  activeDownload = {
+  const ad = {
     item, cardEl, controller,
     paused: false, resume: null,
     chunks: [],
     receivedLength: 0, totalLength: 0,
     startTime: Date.now(),
     lastCheckTime: Date.now(), lastCheckBytes: 0,
-    speed: 0, speedInterval: null
+    speed: 0, speedInterval: null,
+    _done: false
   };
 
+  activeDownloads.set(item.id, ad);
+
   const actions = cardEl.querySelector('.card-actions');
-  activeDownload.actionsChildren = Array.from(actions.children);
-  activeDownload.actionsChildren.forEach(el => el.style.display = 'none');
+  ad.actionsChildren = Array.from(actions.children);
+  ad.actionsChildren.forEach(el => el.style.display = 'none');
 
   const progressEl = document.createElement('div');
   progressEl.className = 'card-progress-inline';
@@ -42,16 +45,15 @@ export function downloadFile(item, cardEl) {
   actions.appendChild(progressEl);
   actions.style.flexDirection = 'column';
 
-  progressEl.querySelector('.cp-pause').addEventListener('click', () => togglePause());
-  progressEl.querySelector('.cp-cancel').addEventListener('click', () => cancelDownload());
+  progressEl.querySelector('.cp-pause').addEventListener('click', () => togglePause(ad));
+  progressEl.querySelector('.cp-cancel').addEventListener('click', () => cancelDownload(ad));
 
-  startSpeedTimer();
-  executeDownload();
+  startSpeedTimer(ad);
+  executeDownload(ad);
 }
 
-async function executeDownload() {
-  const ad = activeDownload;
-  if (!ad) return;
+async function executeDownload(ad) {
+  if (!ad || ad._done) return;
 
   try {
     const res = await apiFetch(ad.item.proxyUrl, { signal: ad.controller.signal });
@@ -64,9 +66,10 @@ async function executeDownload() {
 
     while (true) {
       if (ad.paused) {
-        updatePauseUI(true);
+        updatePauseUI(ad, true);
         await new Promise(resolve => { ad.resume = resolve; });
-        updatePauseUI(false);
+        if (ad._done) return;
+        updatePauseUI(ad, false);
       }
 
       ad.controller.signal.throwIfAborted();
@@ -76,19 +79,19 @@ async function executeDownload() {
 
       ad.chunks.push(value);
       ad.receivedLength += value.length;
-      updateProgress();
+      updateProgress(ad);
     }
 
-    finishDownload();
+    finishDownload(ad);
   } catch (err) {
-    if (err.name === 'AbortError') return cleanup();
-    onError(err.message);
+    if (err.name === 'AbortError') return cleanup(ad);
+    onError(ad, err.message);
   }
 }
 
-function finishDownload() {
-  const ad = activeDownload;
-  if (!ad) return;
+function finishDownload(ad) {
+  if (!ad || ad._done) return;
+  ad._done = true;
 
   const blob = new Blob(ad.chunks);
   const blobUrl = URL.createObjectURL(blob);
@@ -100,14 +103,14 @@ function finishDownload() {
   a.remove();
   URL.revokeObjectURL(blobUrl);
 
-  showDoneUI();
-  setTimeout(cleanup, 2500);
+  showDoneUI(ad);
+  setTimeout(() => cleanup(ad), 2500);
 }
 
-function startSpeedTimer() {
-  const ad = activeDownload;
+function startSpeedTimer(ad) {
   if (!ad) return;
   ad.speedInterval = setInterval(() => {
+    if (ad._done) return;
     const now = Date.now();
     const elapsed = (now - ad.lastCheckTime) / 1000;
     if (elapsed > 0) {
@@ -120,9 +123,8 @@ function startSpeedTimer() {
   }, 200);
 }
 
-function updateProgress() {
-  const ad = activeDownload;
-  if (!ad) return;
+function updateProgress(ad) {
+  if (!ad || ad._done) return;
 
   const now = Date.now();
   if (ad._lastProgressUpdate && (now - ad._lastProgressUpdate) < 200) return;
@@ -144,9 +146,8 @@ function updateProgress() {
   }
 }
 
-function togglePause() {
-  const ad = activeDownload;
-  if (!ad) return;
+function togglePause(ad) {
+  if (!ad || ad._done) return;
   if (ad.paused) {
     ad.paused = false;
     if (ad.resume) ad.resume();
@@ -155,22 +156,19 @@ function togglePause() {
   }
 }
 
-function updatePauseUI(paused) {
-  const ad = activeDownload;
-  if (!ad) return;
+function updatePauseUI(ad, paused) {
+  if (!ad || ad._done) return;
   const btn = ad.cardEl?.querySelector('.cp-pause');
   if (btn) btn.textContent = paused ? `▶ ${t('dl.resume')}` : `⏸ ${t('dl.pause')}`;
 }
 
-function cancelDownload() {
-  const ad = activeDownload;
-  if (!ad) return;
+function cancelDownload(ad) {
+  if (!ad || ad._done) return;
   ad.controller.abort();
-  cleanup();
+  cleanup(ad);
 }
 
-function showDoneUI() {
-  const ad = activeDownload;
+function showDoneUI(ad) {
   if (!ad || !ad.cardEl) return;
   const progressEl = ad.cardEl.querySelector('.card-progress-inline');
   if (progressEl) {
@@ -183,9 +181,9 @@ function showDoneUI() {
   }
 }
 
-function onError(message) {
-  const ad = activeDownload;
-  if (!ad) return;
+function onError(ad, message) {
+  if (!ad || ad._done) return;
+  ad._done = true;
   Toast.show(`${t('dl.error')}: ${message}`, 'error');
   const progressEl = ad.cardEl?.querySelector('.card-progress-inline');
   if (progressEl) {
@@ -196,15 +194,16 @@ function onError(message) {
       </div>
       <button class="btn btn-primary btn-sm cp-close" style="margin-top:6px;width:100%;padding:4px 8px;font-size:0.75rem;">${t('actions.close')}</button>
     `;
-    progressEl.querySelector('.cp-close')?.addEventListener('click', () => cleanup());
+    progressEl.querySelector('.cp-close')?.addEventListener('click', () => cleanup(ad));
   }
-  setTimeout(cleanup, 4000);
+  setTimeout(() => cleanup(ad), 4000);
 }
 
-function cleanup() {
-  const ad = activeDownload;
+function cleanup(ad) {
   if (!ad) return;
+  ad._done = true;
   if (ad.speedInterval) clearInterval(ad.speedInterval);
+  activeDownloads.delete(ad.item.id);
   const progressEl = ad.cardEl?.querySelector('.card-progress-inline');
   if (progressEl) progressEl.remove();
   const actions = ad.cardEl?.querySelector('.card-actions');
@@ -212,5 +211,4 @@ function cleanup() {
     actions.style.flexDirection = '';
     (ad.actionsChildren || []).forEach(el => el.style.display = '');
   }
-  activeDownload = null;
 }

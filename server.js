@@ -1157,6 +1157,72 @@ async function scrapeTwitter(url) {
     }
   }
 
+  // Extract images: meta tags (most reliable) + tweet photo gallery images
+  let imgUrls = [];
+  const tweetId = url.match(/\/status\/(\d+)/i)?.[1];
+
+  // 1. Meta tag images (og:image, twitter:image) — guaranteed tweet media
+  const metaImgRegex = /<meta[^>]+(?:property|name)\s*=\s*["'](?:og:image|twitter:image(?::src)?)["'][^>]+content\s*=\s*["']([^"']+)["']/gi;
+  let mm;
+  while ((mm = metaImgRegex.exec(html)) !== null) {
+    let url = mm[1].replace(/&amp;/g, '&');
+    if (!seen.has(url)) {
+      seen.add(url);
+      imgUrls.push(url);
+    }
+  }
+
+  // 2. Images preceding photo gallery <a> links for this tweet
+  //    (finds all tweet media including images beyond the first og:image)
+  if (tweetId) {
+    const photoImgRegex = new RegExp(
+      '<img[^>]*src\\s*=\\s*["\'][^"\']*pbs\\.twimg\\.com\\/media\\/[^"\']*["\'][^>]*>(?:(?!<img)[\\s\\S])*?<a[^>]*href\\s*=\\s*["\'][^"\']*\\/status\\/' + tweetId + '\\/photo\\/\\d+["\']',
+      'gi'
+    );
+    let mi;
+    while ((mi = photoImgRegex.exec(html)) !== null) {
+      const srcMatch = mi[0].match(/src\s*=\s*["']([^"']+)["']/i);
+      if (srcMatch) {
+        let imgUrl = srcMatch[1].replace(/&amp;/g, '&');
+        if (!seen.has(imgUrl)) {
+          seen.add(imgUrl);
+          imgUrls.push(imgUrl);
+        }
+      }
+    }
+  }
+
+  // Deduplicate by base media ID (strip variant suffixes like ?format= and :large)
+  const baseSeen = new Set();
+  for (const imgUrl of imgUrls) {
+    // Strip query, :size suffix, then extension to get the media ID for dedup
+    let key = imgUrl.split('?')[0];
+    key = key.replace(/:\w+$/, '');
+    key = key.replace(/\.\w{3,4}$/, '');
+    if (baseSeen.has(key)) continue;
+    baseSeen.add(key);
+    const nameMatch = imgUrl.match(/\/([^\/?]+)/);
+    let name = nameMatch ? decodeURIComponent(nameMatch[1]) : 'tweet_image.jpg';
+    // Normalize to highest quality: replace name=medium/orig with :large suffix
+    let finalUrl = imgUrl.replace(/\?.*$/, '') + '?format=jpg&name=orig';
+    // If the original had an extension (meta tag URL like .jpg:large), use that as-is
+    if (imgUrl.match(/\.\w{3,4}(?::|$)/)) {
+      finalUrl = imgUrl.replace(/:\w+$/, '');
+    }
+    const extMatch = imgUrl.match(/\.(\w{3,4})(?:\?|$)/);
+    const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+    console.log(`[Twitter] Image: ${finalUrl.substring(0, 100)}`);
+    items.push({
+      type: 'image',
+      name,
+      url: finalUrl,
+      ext,
+      label: 'image',
+      size: 0,
+      thumbnail: imgUrl
+    });
+  }
+
   return { title, url, items };
 }
 
@@ -1188,8 +1254,7 @@ async function analyzePage(url) {
   }
 
   if (url.includes('x.com') || url.includes('twitter.com')) {
-    const twData = await scrapeTwitter(url);
-    if (twData && twData.items.length > 0) return twData;
+    return await scrapeTwitter(url);
   }
 
   // Fallback to generic extractor
@@ -1199,6 +1264,8 @@ async function analyzePage(url) {
 // -------------------------------------------------------------
 // ZIP Batch Task Manager
 // -------------------------------------------------------------
+const ZIP_CONCURRENCY = 3;
+
 async function runZipTask(taskId, items) {
   const task = {
     taskId,
@@ -1213,7 +1280,7 @@ async function runZipTask(taskId, items) {
   };
 
   zipTasks.set(taskId, task);
-  console.log(`[ZIP] Task ${taskId}: processing ${items.length} file(s)`);
+  console.log(`[ZIP] Task ${taskId}: processing ${items.length} file(s) with concurrency ${ZIP_CONCURRENCY}`);
 
   const output = fs.createWriteStream(task.zipFilePath);
   const archive = archiver('zip', { zlib: { level: 5 } });
@@ -1231,15 +1298,15 @@ async function runZipTask(taskId, items) {
   });
 
   try {
-    for (let i = 0; i < items.length; i++) {
-      if (task.status === 'cancelled') {
-        console.log(`[ZIP] Task ${taskId}: cancelled at file ${i}/${items.length}`);
-        break;
-      }
+    // Concurrency-limited pool
+    let index = 0;
+    let completed = 0;
+    const errors = [];
 
-      const item = items[i];
-      task.currentName = item.name;
-      console.log(`[ZIP] Task ${taskId}: fetching [${i + 1}/${items.length}] ${item.name}`);
+    async function fetchAndAppend(itemIdx) {
+      if (task.status === 'cancelled') return;
+      const item = items[itemIdx];
+      console.log(`[ZIP] Task ${taskId}: fetching [${itemIdx + 1}/${items.length}] ${item.name}`);
 
       try {
         const fetchHeaders = {
@@ -1267,24 +1334,49 @@ async function runZipTask(taskId, items) {
             chunks.push(buffer);
             task.currentBytes += buffer.length;
           }
-          archive.append(Buffer.concat(chunks), { name: item.name || `file_${i + 1}.${item.ext || 'bin'}` });
+          archive.append(Buffer.concat(chunks), { name: item.name || `file_${itemIdx + 1}.${item.ext || 'bin'}` });
           console.log(`[ZIP] Task ${taskId}: appended ${item.name} (${(task.currentBytes / 1024 / 1024).toFixed(1)} MB total)`);
         } else {
           console.warn(`[ZIP] Task ${taskId}: HTTP ${itemRes.status} for ${item.url}`);
+          errors.push({ name: item.name, status: itemRes.status });
         }
       } catch (err) {
         console.error(`[ZIP] Task ${taskId}: fetch error for ${item.name}: ${err.message}`);
+        errors.push({ name: item.name, error: err.message });
       }
 
-      task.processed = i + 1;
+      completed++;
+      task.processed = completed;
       const elapsedSec = (Date.now() - task.startTime) / 1000;
       task.speed = elapsedSec > 0 ? Math.round(task.currentBytes / elapsedSec) : 0;
+    }
+
+    // Fill the initial slot pool
+    const running = new Set();
+    while (index < items.length && running.size < ZIP_CONCURRENCY) {
+      const p = fetchAndAppend(index++);
+      running.add(p);
+      p.finally(() => running.delete(p));
+    }
+
+    while (running.size > 0) {
+      if (task.status === 'cancelled') break;
+      await Promise.race(running);
+      // Fill any empty slots
+      while (index < items.length && running.size < ZIP_CONCURRENCY) {
+        const p = fetchAndAppend(index++);
+        running.add(p);
+        p.finally(() => running.delete(p));
+      }
     }
 
     if (task.status !== 'cancelled') {
       await archive.finalize();
       task.status = 'completed';
-      console.log(`[ZIP] Task ${taskId}: completed successfully`);
+      if (errors.length > 0) {
+        task.error = `${errors.length} file(s) failed to download`;
+      }
+      console.log(`[ZIP] Task ${taskId}: completed (${items.length - errors.length}/${items.length} files)`);
     }
   } catch (err) {
     task.status = 'error';
@@ -1598,7 +1690,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 7. Static File Serving (HTML, CSS, JS, Locales) with Cache Headers + Gzip
-  const requestedPath = pathname === '/' ? 'dashboard.html' : pathname.slice(1);
+  const requestedPath = pathname === '/' || pathname === '/dashboard.html' ? 'index.html' : pathname.slice(1);
 
   // Protect HTML pages behind auth
   if (AUTH_TOKEN && (requestedPath.endsWith('.html') || pathname === '/')) {

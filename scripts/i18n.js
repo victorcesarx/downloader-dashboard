@@ -71,6 +71,16 @@ export function translateDOM() {
     const key = el.getAttribute('data-i18n-title');
     el.title = t(key);
   });
+
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+    const key = el.getAttribute('data-i18n-aria-label');
+    el.setAttribute('aria-label', t(key));
+  });
+
+  document.querySelectorAll('[data-i18n-content]').forEach(el => {
+    const key = el.getAttribute('data-i18n-content');
+    el.setAttribute('content', t(key));
+  });
 }
 
 export async function initI18n() {

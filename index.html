@@ -1,19 +1,219 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title data-i18n="app.title">WebScope - Extrator e Downloader de Mídias</title>
-  <meta name="description" content="WebScope permite extrair e baixar imagens, vídeos e arquivos de qualquer site de hospedagem de forma fácil e rápida." />
+  <meta data-i18n-content="app.description" name="description" content="WebScope permite extrair e baixar imagens, vídeos e arquivos de qualquer site de hospedagem de forma fácil e rápida." />
   <link rel="stylesheet" href="/styles/main.css">
   <style>
     html:not(.i18n-ready) { visibility: hidden; }
   </style>
   <script>
-    const theme = localStorage.getItem('downdash_theme') || 'dark';
+    const theme = localStorage.getItem('downdash_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme', theme);
-    window.__LOCALES__ = {"pt-BR":{"app":{"title":"WebScope - Extrator e Downloader de Mídias","subtitle":"Extraia vídeos, áudios, imagens e documentos de qualquer site instantaneamente","tagline":"Cole qualquer URL e baixe mídias de forma rápida, segura e em alta qualidade.","start_now":"Começar Agora","features_link":"Recursos","supported_sites":"Sites Suportados"},"nav":{"dashboard":"Dashboard","landing":"Início","theme":"Alternar Tema","language":"Idioma"},"search":{"placeholder":"Cole aqui o link da página (ex: https://gofile.io/d/..., pixeldrain.com...)","analyze_btn":"Analisar Link","analyzing":"Analisando..."},"filters":{"all":"Todos","video":"Vídeos","image":"Imagens","audio":"Áudios","document":"Documentos","search_input":"Buscar mídias..."},"actions":{"select_all":"Selecionar Todos","deselect_all":"Desmarcar Todos","download_selected":"Baixar Selecionados (ZIP)","download":"Download","preview":"Assistir / Preview","cancel":"Cancelar","close":"Fechar","copy_link":"Copiar Link"},"views":{"grid":"Grade","list":"Lista","grid_title":"Modo Grade","list_title":"Modo Lista"},"landing":{"headline":"Baixe mídias de qualquer lugar com o <span class=\"gradient-text\">WebScope</span>","feature1_title":"Extração Ultra Rápida","feature1_desc":"Scraper inteligente capaz de identificar múltiplos formatos de mídia em segundos.","feature2_title":"Download em Lote ZIP","feature2_desc":"Selecione dezenas de mídias e receba um único arquivo ZIP compactado com progresso em tempo real.","feature3_title":"Proxy Integrado","feature3_desc":"Bypass inteligente de CORS e suporte a Range Headers para reproduzir vídeos diretamente no navegador.","footer":"WebScope - Downloader Dashboard. Todos os direitos reservados."},"status":{"empty":"Nenhuma mídia encontrada. Cole uma URL acima para começar a análise.","found_count":"{count} mídia(s) encontrada(s)","loading":"Extraindo informações e links de mídia...","downloading":"Baixando...","paused":"Pausado","error":"Ocorreu um erro ao processar o link. Verifique a URL e tente novamente."},"zip":{"title":"Download em Lote (ZIP)","preparing":"Preparando arquivos para compressão...","progress":"Processando arquivo {current} de {total}","download_ready":"Seu arquivo ZIP está pronto!","download_btn":"Baixar ZIP Agora","speed":"Velocidade: {speed}","estimated_bytes":"Tamanho processado: {bytes}"},"modal":{"preview_title":"Visualizar Mídia","unsupported_preview":"Visualização não suportada para este tipo de arquivo."},"dl":{"pause":"Pausar","resume":"Retomar","cancel":"Cancelar","complete":"Download concluído!","error":"Erro no download"},"toast":{"analyzed_success":"Mídias extraídas com sucesso!","copied":"Link copiado para a área de transferência!","download_started":"Download iniciado.","download_in_progress":"Já existe um download em andamento","zip_error":"Erro ao gerar arquivo ZIP."}},"en":{"app":{"title":"WebScope - Media Extractor & Downloader","subtitle":"Extract videos, audio, images and documents from any site instantly","tagline":"Paste any URL and download media quickly, safely, and in high quality.","start_now":"Start Now","features_link":"Features","supported_sites":"Supported Sites"},"nav":{"dashboard":"Dashboard","landing":"Home","theme":"Toggle Theme","language":"Language"},"search":{"placeholder":"Paste page link here (e.g., https://gofile.io/d/..., pixeldrain.com...)","analyze_btn":"Analyze Link","analyzing":"Analyzing..."},"filters":{"all":"All","video":"Videos","image":"Images","audio":"Audio","document":"Documents","search_input":"Search media..."},"actions":{"select_all":"Select All","deselect_all":"Deselect All","download_selected":"Download Selected (ZIP)","download":"Download","preview":"Watch / Preview","cancel":"Cancel","close":"Close","copy_link":"Copy Link"},"views":{"grid":"Grid","list":"List","grid_title":"Grid View","list_title":"List View"},"landing":{"headline":"Download media from anywhere with <span class=\"gradient-text\">WebScope</span>","feature1_title":"Ultra-Fast Extraction","feature1_desc":"Smart scraper capable of identifying multiple media formats in seconds.","feature2_title":"Batch ZIP Download","feature2_desc":"Select dozens of media files and receive a single compressed ZIP file with real-time progress.","feature3_title":"Built-in Proxy","feature3_desc":"Smart CORS bypass with Range Header support to play videos directly in the browser.","footer":"WebScope - Downloader Dashboard. All rights reserved."},"status":{"empty":"No media found. Paste a URL above to start analyzing.","found_count":"{count} media item(s) found","loading":"Extracting information and media links...","downloading":"Downloading...","paused":"Paused","error":"An error occurred while processing the link. Check the URL and try again."},"zip":{"title":"Batch Download (ZIP)","preparing":"Preparing files for compression...","progress":"Processing file {current} of {total}","download_ready":"Your ZIP file is ready!","download_btn":"Download ZIP Now","speed":"Speed: {speed}","estimated_bytes":"Processed size: {bytes}"},"modal":{"preview_title":"Media Preview","unsupported_preview":"Preview not supported for this file type."},"dl":{"pause":"Pause","resume":"Resume","cancel":"Cancel","complete":"Download complete!","error":"Download error"},"toast":{"analyzed_success":"Media extracted successfully!","copied":"Link copied to clipboard!","download_started":"Download started.","download_in_progress":"A download is already in progress","zip_error":"Error generating ZIP file."}}};
-  </script>
+        window.__LOCALES__ = {"pt-BR":{
+  "app": {
+    "title": "WebScope - Extrator e Downloader de Mídias",
+    "subtitle": "Extraia vídeos, áudios, imagens e documentos de qualquer site instantaneamente",
+    "tagline": "Cole qualquer URL e baixe mídias de forma rápida, segura e em alta qualidade.",
+    "start_now": "Começar Agora",
+    "features_link": "Recursos",
+    "supported_sites": "Sites Suportados",
+    "description": "WebScope permite extrair e baixar imagens, vídeos e arquivos de qualquer site de hospedagem de forma fácil e rápida."
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "landing": "Início",
+    "theme": "Alternar Tema",
+    "language": "Idioma",
+    "language_label": "Seletor de Idioma",
+    "theme_label": "Alternar Tema"
+  },
+  "search": {
+    "placeholder": "Cole aqui o link da página (ex: https://gofile.io/d/..., pixeldrain.com...)",
+    "analyze_btn": "Analisar Link",
+    "analyzing": "Analisando...",
+    "drop_here": "Solte a URL aqui"
+  },
+  "filters": {
+    "all": "Todos",
+    "video": "Vídeos",
+    "image": "Imagens",
+    "audio": "Áudios",
+    "document": "Documentos",
+    "search_input": "Buscar mídias..."
+  },
+  "actions": {
+    "select_all": "Selecionar Todos",
+    "deselect_all": "Desmarcar Todos",
+    "download_selected": "Baixar Selecionados (ZIP)",
+    "download": "Download",
+    "preview": "Assistir / Preview",
+    "cancel": "Cancelar",
+    "close": "Fechar",
+    "copy_link": "Copiar Link",
+    "nsfw_title": "Alternar desfoque NSFW"
+  },
+  "views": {
+    "grid": "Grade",
+    "list": "Lista",
+    "grid_title": "Modo Grade",
+    "list_title": "Modo Lista"
+  },
+  "landing": {
+    "headline": "Baixe mídias de qualquer lugar com o <span class=\"gradient-text\">WebScope</span>",
+    "feature1_title": "Extração Ultra Rápida",
+    "feature1_desc": "Scraper inteligente capaz de identificar múltiplos formatos de mídia em segundos.",
+    "feature2_title": "Download em Lote ZIP",
+    "feature2_desc": "Selecione dezenas de mídias e receba um único arquivo ZIP compactado com progresso em tempo real.",
+    "feature3_title": "Proxy Integrado",
+    "feature3_desc": "Bypass inteligente de CORS e suporte a Range Headers para reproduzir vídeos diretamente no navegador.",
+    "footer": "WebScope - Downloader Dashboard. Desenvolvido com Node.js puro & Vanilla JS."
+  },
+  "status": {
+    "empty": "Nenhuma mídia encontrada. Cole uma URL acima para começar a análise.",
+    "found_count": "{count} mídia(s) encontrada(s)",
+    "loading": "Extraindo informações e links de mídia...",
+    "downloading": "Baixando...",
+    "paused": "Pausado",
+    "error": "Ocorreu um erro ao processar o link. Verifique a URL e tente novamente.",
+    "filter_empty": "Nenhum resultado para os filtros atuais."
+  },
+  "zip": {
+    "title": "Download em Lote (ZIP)",
+    "preparing": "Preparando arquivos para compressão...",
+    "progress": "Processando arquivo {current} de {total}",
+    "download_ready": "Seu arquivo ZIP está pronto!",
+    "download_btn": "Baixar ZIP Agora",
+    "speed": "Velocidade: {speed}",
+    "estimated_bytes": "Tamanho processado: {bytes}",
+    "start_error": "Falha ao iniciar empacotamento ZIP",
+    "task_error": "Task cancelada ou com erro"
+  },
+  "modal": {
+    "preview_title": "Visualizar Mídia",
+    "unsupported_preview": "Visualização não suportada para este tipo de arquivo."
+  },
+  "dl": {
+    "pause": "Pausar",
+    "resume": "Retomar",
+    "cancel": "Cancelar",
+    "complete": "Download concluído!",
+    "error": "Erro no download"
+  },
+  "toast": {
+    "analyzed_success": "Mídias extraídas com sucesso!",
+    "copied": "Link copiado para a área de transferência!",
+    "download_started": "Download iniciado.",
+    "download_in_progress": "Já existe um download em andamento",
+    "zip_error": "Erro ao gerar arquivo ZIP.",
+    "invalid_url": "URL inválida",
+    "no_media_selected": "Nenhuma mídia selecionada."
+  }
+}
+,"en":{
+  "app": {
+    "title": "WebScope - Media Extractor & Downloader",
+    "subtitle": "Extract videos, audio, images and documents from any site instantly",
+    "tagline": "Paste any URL and download media quickly, safely, and in high quality.",
+    "start_now": "Start Now",
+    "features_link": "Features",
+    "supported_sites": "Supported Sites",
+    "description": "Extract videos, audio, images and documents from any site instantly for individual or batch (ZIP) download."
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "landing": "Home",
+    "theme": "Toggle Theme",
+    "language": "Language",
+    "language_label": "Language Selector",
+    "theme_label": "Toggle Theme"
+  },
+  "search": {
+    "placeholder": "Paste page link here (e.g., https://gofile.io/d/..., pixeldrain.com...)",
+    "analyze_btn": "Analyze Link",
+    "analyzing": "Analyzing...",
+    "drop_here": "Drop URL here"
+  },
+  "filters": {
+    "all": "All",
+    "video": "Videos",
+    "image": "Images",
+    "audio": "Audio",
+    "document": "Documents",
+    "search_input": "Search media..."
+  },
+  "actions": {
+    "select_all": "Select All",
+    "deselect_all": "Deselect All",
+    "download_selected": "Download Selected (ZIP)",
+    "download": "Download",
+    "preview": "Watch / Preview",
+    "cancel": "Cancel",
+    "close": "Close",
+    "copy_link": "Copy Link",
+    "nsfw_title": "Toggle NSFW blur"
+  },
+  "views": {
+    "grid": "Grid",
+    "list": "List",
+    "grid_title": "Grid View",
+    "list_title": "List View"
+  },
+  "landing": {
+    "headline": "Download media from anywhere with <span class=\"gradient-text\">WebScope</span>",
+    "feature1_title": "Ultra-Fast Extraction",
+    "feature1_desc": "Smart scraper capable of identifying multiple media formats in seconds.",
+    "feature2_title": "Batch ZIP Download",
+    "feature2_desc": "Select dozens of media files and receive a single compressed ZIP file with real-time progress.",
+    "feature3_title": "Built-in Proxy",
+    "feature3_desc": "Smart CORS bypass with Range Header support to play videos directly in the browser.",
+    "footer": "WebScope - Downloader Dashboard. Built with pure Node.js & Vanilla JS."
+  },
+  "status": {
+    "empty": "No media found. Paste a URL above to start analyzing.",
+    "found_count": "{count} media item(s) found",
+    "loading": "Extracting information and media links...",
+    "downloading": "Downloading...",
+    "paused": "Paused",
+    "error": "An error occurred while processing the link. Check the URL and try again.",
+    "filter_empty": "No results for current filters."
+  },
+  "zip": {
+    "title": "Batch Download (ZIP)",
+    "preparing": "Preparing files for compression...",
+    "progress": "Processing file {current} of {total}",
+    "download_ready": "Your ZIP file is ready!",
+    "download_btn": "Download ZIP Now",
+    "speed": "Speed: {speed}",
+    "estimated_bytes": "Processed size: {bytes}",
+    "start_error": "Failed to start ZIP packaging",
+    "task_error": "Task cancelled or error"
+  },
+  "modal": {
+    "preview_title": "Media Preview",
+    "unsupported_preview": "Preview not supported for this file type."
+  },
+  "dl": {
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel",
+    "complete": "Download complete!",
+    "error": "Download error"
+  },
+  "toast": {
+    "analyzed_success": "Media extracted successfully!",
+    "copied": "Link copied to clipboard!",
+    "download_started": "Download started.",
+    "download_in_progress": "A download is already in progress",
+    "zip_error": "Error generating ZIP file.",
+    "invalid_url": "Invalid URL",
+    "no_media_selected": "No media selected."
+  }
+}
+};
+</script>
 </head>
 <body>
   <div class="bg-glow"></div>
@@ -21,18 +221,19 @@
   <!-- Navbar -->
   <header class="navbar">
     <div class="container" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-      <a href="/index.html" class="brand">
+      <a href="#home" class="brand">
         <div class="brand-icon">⚡</div>
         <span>WebScope</span>
       </a>
 
       <div class="nav-actions">
-        <a href="/dashboard.html" class="btn btn-primary btn-sm" data-i18n="nav.dashboard">Dashboard</a>
-        <select id="lang-select" class="select-input" aria-label="Language Selector">
+        <a href="#dashboard" class="btn btn-primary btn-sm" data-i18n="nav.dashboard" id="nav-dashboard">Dashboard</a>
+        <a href="#home" class="btn btn-secondary btn-sm" data-i18n="nav.landing" id="nav-landing">Início</a>
+        <select id="lang-select" class="select-input" data-i18n-aria-label="nav.language_label" aria-label="Language Selector">
           <option value="pt-BR">Português</option>
           <option value="en">English</option>
         </select>
-        <label class="theme-toggle" aria-label="Toggle Theme">
+        <label class="theme-toggle" data-i18n-aria-label="nav.theme_label" aria-label="Toggle Theme">
           <input type="checkbox" id="theme-toggle-input" />
           <span class="theme-toggle-slider"></span>
         </label>
@@ -40,7 +241,8 @@
     </div>
   </header>
 
-  <main class="container" style="padding-top: 80px; padding-bottom: 80px;">
+  <!-- Landing View -->
+  <main id="view-landing" class="container" style="padding-top: 80px; padding-bottom: 80px; display:none;">
     <div style="text-align: center; max-width: 800px; margin: 0 auto;">
       <h1 style="font-size: 3.5rem; margin-bottom: 24px; line-height: 1.1;" data-i18n-html="landing.headline">
         Baixe mídias de qualquer lugar com o <span class="gradient-text">WebScope</span>
@@ -50,7 +252,7 @@
       </p>
 
       <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 60px;">
-        <a href="/dashboard.html" class="btn btn-primary" style="padding: 14px 32px; font-size: 1.1rem;" data-i18n="app.start_now">
+        <a href="#dashboard" class="btn btn-primary" style="padding: 14px 32px; font-size: 1.1rem;" data-i18n="app.start_now">
           Abrir Dashboard ⚡
         </a>
       </div>
@@ -78,9 +280,82 @@
     </div>
   </main>
 
+  <!-- Dashboard View -->
+  <main id="view-dashboard" class="container" style="padding-bottom: 60px; display:none;">
+    <!-- Hero & Search Input -->
+    <section class="hero-section">
+      <h1 class="hero-title" data-i18n="app.title">WebScope - Extrator de Mídias</h1>
+      <p class="hero-subtitle" data-i18n="app.subtitle">Extraia vídeos, áudios, imagens e documentos de qualquer site instantaneamente</p>
+
+      <div class="search-box-wrapper">
+        <form id="analyze-form" class="search-box">
+          <span class="search-icon">🔍</span>
+          <input 
+            type="url" 
+            id="url-input" 
+            class="search-input" 
+            placeholder="Cole aqui o link da página (ex: https://gofile.io/d/..., pixeldrain.com...)" 
+            data-i18n-placeholder="search.placeholder"
+            required 
+          />
+          <button type="submit" id="analyze-btn" class="btn btn-primary" data-i18n="search.analyze_btn"><span class="spinner"></span> Analisar Link</button>
+        </form>
+        <div class="drag-overlay" data-i18n="search.drop_here">Solte a URL aqui</div>
+      </div>
+    </section>
+
+    <!-- Controls Bar -->
+    <section class="controls-bar">
+      <div class="filter-pills">
+        <button class="filter-pill active" data-filter="all" data-i18n="filters.all">Todos</button>
+        <button class="filter-pill" data-filter="video" data-i18n="filters.video">Vídeos</button>
+        <button class="filter-pill" data-filter="image" data-i18n="filters.image">Imagens</button>
+        <button class="filter-pill" data-filter="audio" data-i18n="filters.audio">Áudios</button>
+        <button class="filter-pill" data-filter="document" data-i18n="filters.document">Documentos</button>
+      </div>
+
+      <div class="bar-right">
+        <button id="nsfw-btn" class="nsfw-btn" data-i18n-title="actions.nsfw_title" title="Toggle NSFW blur">NSFW</button>
+        <input 
+          type="text" 
+          id="search-filter-input" 
+          class="search-filter-input" 
+          placeholder="Buscar mídias..." 
+          data-i18n-placeholder="filters.search_input"
+        />
+
+        <div class="view-toggle">
+          <button id="view-grid-btn" class="view-btn active" data-i18n-title="views.grid_title">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+          </button>
+          <button id="view-list-btn" class="view-btn" data-i18n-title="views.list_title">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Global Selection & Status Bar -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px; flex-wrap:wrap; gap:12px;">
+      <div id="found-count" style="font-weight: 600; color: var(--text-secondary);">
+        0 mídia(s) encontrada(s)
+      </div>
+
+      <div style="display:flex; gap:8px;">
+        <button id="toggle-select-btn" class="btn btn-secondary btn-sm">Selecionar Todos</button>
+        <button id="download-selected-btn" class="btn btn-primary btn-sm" disabled data-i18n="actions.download_selected">Baixar Selecionados (ZIP) <span id="total-size-display" class="total-size-info"></span></button>
+      </div>
+    </div>
+
+    <!-- Media Cards Display Container -->
+    <div id="media-container" class="media-container grid-view">
+      <!-- Media Cards injected by renderer.js -->
+    </div>
+  </main>
+
   <footer class="footer">
     <div class="container">
-      <p data-i18n="landing.footer">&copy; 2026 WebScope - Downloader Dashboard. Todos os direitos reservados.</p>
+      <p data-i18n="landing.footer">&copy; 2026 WebScope - Downloader Dashboard. Desenvolvido com Node.js puro & Vanilla JS.</p>
     </div>
   </footer>
 
@@ -99,6 +374,8 @@
       document.querySelectorAll('[data-i18n-html]').forEach(function(el){ el.innerHTML = resolve(el.getAttribute('data-i18n-html')); });
       document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el){ el.placeholder = resolve(el.getAttribute('data-i18n-placeholder')); });
       document.querySelectorAll('[data-i18n-title]').forEach(function(el){ el.title = resolve(el.getAttribute('data-i18n-title')); });
+      document.querySelectorAll('[data-i18n-aria-label]').forEach(function(el){ el.setAttribute('aria-label', resolve(el.getAttribute('data-i18n-aria-label'))); });
+      document.querySelectorAll('[data-i18n-content]').forEach(function(el){ el.setAttribute('content', resolve(el.getAttribute('data-i18n-content'))); });
       document.documentElement.classList.add('i18n-ready');
     })();
   </script>

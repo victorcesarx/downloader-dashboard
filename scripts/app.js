@@ -47,20 +47,21 @@ function initRouter() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // 0. SPA Router
-  initRouter();
-
-  // 1. Initialize Theme
+  // 0. Initialize Theme
   initTheme();
 
-  // 2. Initialize i18n
+  // 1. Initialize i18n (must be before router, which uses t() for button text)
   await initI18n();
+
+  // 2. SPA Router
+  initRouter();
 
   // 3. Attach Event Listeners
   setupEventListeners();
 
   // 4. Initial Render
   renderMediaContainer();
+  updateBatchActionsUI();
 });
 
 function initTheme() {

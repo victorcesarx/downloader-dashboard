@@ -797,6 +797,64 @@ async function scrapeCyberDropWithHtml(url, html) {
 }
 
 // 4. Bunkr Scraper (Supports single file resolution & albums)
+// Resolve a single Bunkr file page (/f/SLUG) to its signed download URL
+async function resolveBunkrFile(fileSlug, baseUrl) {
+  const pageUrl = (baseUrl || 'https://bunkr.cr') + '/f/' + fileSlug;
+  try {
+    const res = await fetch(pageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+
+    const cdnMatch = html.match(/var\s+jsCDN\s*=\s*"([^"]+)"/);
+    const coverMatch = html.match(/var\s+videoCoverUrl\s*=\s*"([^"]+)"/);
+
+    if (!cdnMatch) return null;
+
+    const rawCdn = cdnMatch[1].replace(/\\\//g, '/');
+    const thumbnail = coverMatch ? coverMatch[1].replace(/\\\//g, '/') : null;
+
+    // Sign the CDN URL
+    const cdnUrl = new URL(rawCdn);
+    const path = decodeURIComponent(cdnUrl.pathname);
+    let signedUrl = rawCdn;
+
+    try {
+      const signRes = await fetch('https://glb-apisign.cdn.cr/sign?path=' + encodeURIComponent(path));
+      if (signRes.ok) {
+        const signData = await signRes.json();
+        cdnUrl.searchParams.set('token', signData.token);
+        cdnUrl.searchParams.set('ex', signData.ex);
+        signedUrl = cdnUrl.toString();
+      }
+    } catch (signErr) {
+      console.warn(`[Bunkr] Signing failed for ${fileSlug}: ${signErr.message}`);
+    }
+
+    const extMatch = rawCdn.match(/\.(\w{3,4})(?:\?|$)/);
+    const ext = extMatch ? extMatch[1].toLowerCase() : 'mp4';
+    let type = 'document';
+    if (['mp4', 'mkv', 'webm', 'mov'].includes(ext)) type = 'video';
+    else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) type = 'image';
+
+    return {
+      type,
+      name: fileSlug + '.' + ext,
+      url: signedUrl,
+      ext,
+      label: type,
+      size: 0,
+      thumbnail
+    };
+  } catch (err) {
+    console.error(`[Bunkr] Error resolving file ${fileSlug}:`, err.message);
+    return null;
+  }
+}
+
 async function scrapeBunkr(url) {
   try {
     if (!url.includes('bunkr.')) return null;
@@ -809,116 +867,38 @@ async function scrapeBunkr(url) {
     if (!res.ok) return null;
     const html = await res.text();
     const items = [];
+    const seenSlugs = new Set();
 
-    // Check for single file download page link e.g. href="https://dl.bunkr.cr/file/46805720"
-    const dlLinkMatch = html.match(/href=["'](https?:\/\/dl\.bunkr\.[a-z]+\/file\/([0-9]+))["']/i) || html.match(/href=["'](https?:\/\/[^"']+\/file\/([0-9]+))["']/i);
-
-    if (dlLinkMatch) {
-      const dlPageUrl = dlLinkMatch[1];
-      const fileId = dlLinkMatch[2];
-      const dlHost = new URL(dlPageUrl).origin;
-
-      try {
-        const metaRes = await fetch(`${dlHost}/api/_001_v2`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          },
-          body: JSON.stringify({ id: fileId })
-        });
-
-        if (metaRes.ok) {
-          const meta = await metaRes.json();
-          const rawUrl = new URL(meta.mediafiles + meta.path);
-          if (meta.original) rawUrl.searchParams.set('n', meta.original);
-
-          let directUrl = null;
-          let name = meta.original || rawUrl.pathname.split('/').pop() || 'bunkr_file';
-
-          // Try signing API; if it fails, attempt to extract signed URL from page HTML
-          try {
-            const signRes = await fetch(`https://glb-apisign.cdn.cr/sign?path=${encodeURIComponent(rawUrl.pathname)}`);
-            if (signRes.ok) {
-              const signData = await signRes.json();
-              rawUrl.searchParams.set('token', signData.token);
-              rawUrl.searchParams.set('ex', signData.ex);
-              directUrl = rawUrl.toString();
-            }
-          } catch (signErr) {
-            console.warn(`[Bunkr] Signing API failed, trying HTML fallback: ${signErr.message}`);
-          }
-
-          // Fallback: try to extract signed URL directly from page HTML
-          if (!directUrl) {
-            const signedInHtml = html.match(new RegExp(escapeRegex(rawUrl.origin + rawUrl.pathname) + '\\?[^"\'\\s<>]+'));
-            if (signedInHtml) {
-              directUrl = signedInHtml[0];
-            } else {
-              // Try <video src> or <source src> on the download page
-              const dlPageRes = await fetch(dlPageUrl);
-              if (dlPageRes.ok) {
-                const dlHtml = await dlPageRes.text();
-                const videoSrc = dlHtml.match(/<video[^>]*src=["']([^"']+)["']/i) || dlHtml.match(/<source[^>]*src=["']([^"']+)["']/i);
-                if (videoSrc) {
-                  directUrl = videoSrc[1].startsWith('http') ? videoSrc[1] : new URL(videoSrc[1], dlPageUrl).href;
-                }
-              }
-            }
-            // Last resort: use unsigned URL
-            if (!directUrl) {
-              directUrl = rawUrl.toString();
-            }
-          }
-          const ext = (name.split('.').pop() || '').toLowerCase();
-          let type = 'document';
-          if (['mp4', 'mkv', 'webm', 'mov'].includes(ext)) type = 'video';
-          else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) type = 'image';
-
-          let thumbnail = null;
-          if (type === 'video') {
-            thumbnail = extractOGImage(html);
-          }
-
-          items.push({ type, name, url: directUrl, ext, label: type, size: 0, thumbnail });
-        }
-      } catch (err) {
-        console.error('Bunkr metadata resolution error:', err);
-      }
+    // Single file page
+    const isSingleFile = url.match(/\/f\/([A-Za-z0-9]+)/i);
+    if (isSingleFile) {
+      const item = await resolveBunkrFile(isSingleFile[1], new URL(url).origin);
+      if (item) items.push(item);
     }
 
-    // Fallback / Album scraping: search for direct media links in HTML
-    if (items.length === 0) {
-      const linkRegex = /href=["'](https?:\/\/[^"']+\.(?:mp4|mkv|webm|jpg|jpeg|png|webp|gif|mp3))["']/gi;
-      let match;
-      const seen = new Set();
-
-      // Extract thumbnail preview images from the page
-      const thumbUrls = [];
-      const imgRegex = /<img[^>]*src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp|gif))["'][^>]*>/gi;
-      let imgMatch;
-      while ((imgMatch = imgRegex.exec(html)) !== null) {
-        const src = imgMatch[1];
-        if (!thumbUrls.includes(src) && !src.includes('icon') && !src.includes('logo') && !src.includes('avatar')) {
-          thumbUrls.push(src);
+    // Album page: extract all /f/SLUG links and resolve each
+    if (!isSingleFile) {
+      const slugRegex = /href=["']\/f\/([A-Za-z0-9]+)["']/gi;
+      let sm;
+      const slugs = [];
+      while ((sm = slugRegex.exec(html)) !== null) {
+        const slug = sm[1];
+        if (!seenSlugs.has(slug)) {
+          seenSlugs.add(slug);
+          slugs.push(slug);
         }
       }
 
-      let thumbIdx = 0;
-      while ((match = linkRegex.exec(html)) !== null) {
-        const mediaUrl = match[1];
-        if (seen.has(mediaUrl)) continue;
-        seen.add(mediaUrl);
-
-        const name = mediaUrl.split('/').pop() || 'bunkr_file';
-        const ext = (name.split('.').pop() || '').toLowerCase();
-        let type = 'document';
-        if (['mp4', 'webm', 'mkv'].includes(ext)) type = 'video';
-        else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) type = 'image';
-
-        const thumbForItem = type === 'video' && thumbIdx < thumbUrls.length ? thumbUrls[thumbIdx++] : null;
-
-        items.push({ type, name, url: mediaUrl, ext, label: type, size: 0, thumbnail: thumbForItem });
+      if (slugs.length > 0) {
+        // Resolve files with limited concurrency
+        const concurrency = 3;
+        for (let i = 0; i < slugs.length; i += concurrency) {
+          const batch = slugs.slice(i, i + concurrency);
+          const results = await Promise.all(batch.map(slug => resolveBunkrFile(slug, new URL(url).origin)));
+          for (const item of results) {
+            if (item) items.push(item);
+          }
+        }
       }
     }
 

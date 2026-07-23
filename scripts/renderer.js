@@ -342,6 +342,48 @@ export function openPreviewModal(item) {
     document.body.appendChild(modal);
   }
 
+  let closeModalFn = modal._closeModal;
+  if (!closeModalFn) {
+    closeModalFn = () => {
+      modal.classList.remove('open');
+      const mediaEl = modal.querySelector('video, audio');
+      if (mediaEl) mediaEl.pause();
+      if (modal._previousFocus) {
+        modal._previousFocus.focus();
+        modal._previousFocus = null;
+      }
+    };
+    modal._closeModal = closeModalFn;
+  }
+
+  modal._previousFocus = document.activeElement;
+
+  if (!modal._keyHandlerInstalled) {
+    modal._keyHandlerInstalled = true;
+    modal.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeModalFn();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const els = getFocusableElements(modal);
+      if (els.length === 0) return;
+      const first = els[0];
+      const last = els[els.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    });
+  }
+
   let bodyContent = '';
   if (item.type === 'video') {
     bodyContent = `<video src="${item.proxyUrl}" controls autoplay style="width:100%; max-height:70vh;"></video>`;
@@ -357,7 +399,7 @@ export function openPreviewModal(item) {
     <div class="modal-content">
       <div class="modal-header">
         <h3>${sanitizeHtml(item.name)}</h3>
-        <button class="btn btn-icon close-modal-btn">&times;</button>
+        <button class="btn btn-icon close-modal-btn" data-focus-init>&times;</button>
       </div>
       <div class="modal-body">
         ${bodyContent}
@@ -367,14 +409,24 @@ export function openPreviewModal(item) {
 
   modal.classList.add('open');
 
-  const closeModal = () => {
-    modal.classList.remove('open');
-    const mediaEl = modal.querySelector('video, audio');
-    if (mediaEl) mediaEl.pause();
-  };
-
-  modal.querySelector('.close-modal-btn').addEventListener('click', closeModal);
+  modal.querySelector('.close-modal-btn').addEventListener('click', closeModalFn);
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeModal();
+    if (e.target === modal) closeModalFn();
   });
+
+  const focusable = getFocusableElements(modal);
+  const initEl = modal.querySelector('[data-focus-init]') || focusable[0];
+  if (initEl) setTimeout(() => initEl.focus(), 50);
+}
+
+function getFocusableElements(container) {
+  const selectors = [
+    'a[href]',
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])'
+  ];
+  return [...container.querySelectorAll(selectors)].filter(el => el.offsetParent !== null);
 }

@@ -36,6 +36,31 @@ if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
+// Clean orphaned ZIP files on startup
+function cleanupOrphanedZips() {
+  try {
+    const files = fs.readdirSync(TEMP_DIR);
+    const now = Date.now();
+    let removed = 0;
+    for (const file of files) {
+      if (!file.endsWith('.zip')) continue;
+      const filePath = path.join(TEMP_DIR, file);
+      try {
+        const stat = fs.statSync(filePath);
+        // Remove files older than 30 minutes
+        if (now - stat.mtimeMs > 30 * 60 * 1000) {
+          fs.unlinkSync(filePath);
+          removed++;
+        }
+      } catch (e) {}
+    }
+    if (removed > 0) console.log(`[Cleanup] Removed ${removed} orphaned ZIP file(s)`);
+  } catch (e) {}
+}
+cleanupOrphanedZips();
+// Periodically clean every 5 minutes
+setInterval(cleanupOrphanedZips, 5 * 60 * 1000);
+
 // In-memory Store for ZIP tasks
 const zipTasks = new Map();
 
@@ -620,180 +645,125 @@ async function scrapeCyberDropWithHtml(url, html) {
 
   // ----- SINGLE FILE PAGE (/f/) -----
   if (isFilePage) {
-
-    // Collect potential video thumbnails from the page (skip icons/logos)
-    const thumbUrls = [];
-    const imgTagRegex = /<img[^>]*src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp|gif))["'][^>]*>/gi;
-    let imgMatch;
-    while ((imgMatch = imgTagRegex.exec(html)) !== null) {
-      const src = imgMatch[1];
-      if (/icon|logo|avatar|spinner|loading|thumb-|emoji|favicon/i.test(src)) continue;
-      if (thumbUrls.length < 5 && !thumbUrls.includes(src)) thumbUrls.push(src);
+    const slug = url.match(/\/[a-z]\/([a-zA-Z0-9]+)/)?.[1];
+    if (slug) {
+      const resolved = await resolveCyberDropFile(slug);
+      if (resolved) {
+        items.push({
+          type: 'video',
+          name: resolved.name,
+          url: resolved.url,
+          ext: (resolved.type || '').split('/')[1] || 'mp4',
+          label: 'video',
+          size: resolved.size,
+          thumbnail: resolved.thumbnail
+        });
+      }
     }
-
-    // Check if a URL is likely a real media file (not a layout asset)
-    function isMediaUrl(urlStr) {
-      if (/icon|logo|avatar|spinner|loading|banner|sprite|favicon|emoji|placeholder/i.test(urlStr)) return false;
-      if (/\/assets?\//i.test(urlStr)) return false;
-      return true;
+    // Fallback: only if API failed, try HTML parsing
+    if (items.length === 0) {
+      const ogVideo = html.match(/property=["']og:video["']\s+content=["']([^"']+)["']/i)
+                   || html.match(/content=["']([^"']+)["']\s+property=["']og:video["']/i);
+      if (ogVideo) addItem(ogVideo[1], extractOGImage(html) || thumbUrls[0] || null, 'video');
     }
-
-    // Compute extension, type, and name from a URL
-    function parseUrl(mediaUrl) {
-      const rawName = mediaUrl.split('/').pop()?.split('?')[0] || 'media_file';
-      const name = decodeURIComponent(rawName);
-      const ext = (name.split('.').pop() || '').toLowerCase();
-      let type = 'document';
-      if (['mp4', 'webm', 'mkv', 'mov'].includes(ext)) type = 'video';
-      else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) type = 'image';
-      else if (['mp3', 'wav', 'ogg'].includes(ext)) type = 'audio';
-      return { name, ext, type };
+    if (items.length === 0) {
+      console.log(`[CyberDrop] API + HTML fallback failed for ${url}`);
     }
+  }
 
-    function addItem(mediaUrl, thumb = null, forcedType = null) {
-      if (seen.has(mediaUrl)) return;
-      if (!isMediaUrl(mediaUrl)) return;
+  // ----- ALBUM PAGE -----
+  else {
+    // 1. <a href="..."> with known extensions
+    const linkRegex = /href=["'](https?:\/\/[^"']+\.(?:mp4|mkv|webm|jpg|jpeg|png|webp|gif|mp3|wav))["']/gi;
+    let match;
+    let thumbIdx = 0;
+    while ((match = linkRegex.exec(html)) !== null) {
+      const mediaUrl = match[1];
+      if (seen.has(mediaUrl)) continue;
+      if (!isMediaUrl(mediaUrl)) continue;
       seen.add(mediaUrl);
-      const { name, ext, type: detectedType } = parseUrl(mediaUrl);
-      const finalType = forcedType || detectedType;
-      items.push({
-        type: finalType, name, url: mediaUrl, ext,
-        label: finalType, size: 0,
-        thumbnail: finalType !== 'image' ? (thumb || null) : null
-      });
+      const { name, ext, type } = parseUrl(mediaUrl);
+      const thumbForItem = type === 'video' && thumbIdx < thumbUrls.length ? thumbUrls[thumbIdx++] : null;
+      items.push({ type, name, url: mediaUrl, ext, label: type, size: 0, thumbnail: thumbForItem });
     }
 
-    const titleMatch = html.match(/<title>(.*?)<\/title>/i);
-    const pageTitle = titleMatch ? titleMatch[1].trim() : 'CyberDrop';
-
-    // API client for resolving CyberDrop file slugs
-    async function resolveCyberDropFile(slug, thumb = null) {
-      try {
-        const infoRes = await fetchWithCookies(`https://api.cyberdrop.cr/api/file/info/${slug}`, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept': 'application/json' }
+    // 2. <a href="/f/xxxxx"> file page links (common in albums)
+    //    Each links to a file page; try to resolve via API
+    // 2a. Links with thumbnail images (<a ...><img src="..."> ... </a>)
+    const fileLinkRegex = /<a[^>]*href=["'](?:\/f\/|https?:\/\/[^"']*\/f\/)([a-zA-Z0-9]+)["'][^>]*>[\s\S]*?<img[^>]*src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp|gif))["']/gi;
+    let fm;
+    while ((fm = fileLinkRegex.exec(html)) !== null && items.length < 50) {
+      const fileId = fm[1];
+      const thumbUrl = fm[2];
+      if (seen.has(fileId)) continue;
+      seen.add(fileId);
+      if (thumbUrls.length < 10 && !thumbUrls.includes(thumbUrl) && isMediaUrl(thumbUrl)) thumbUrls.push(thumbUrl);
+      const resolved = await resolveCyberDropFile(fileId, thumbUrl);
+      if (resolved) {
+        items.push({
+          type: 'video', name: resolved.name, url: resolved.url,
+          ext: (resolved.type || '').split('/')[1] || 'mp4',
+          label: 'video', size: resolved.size, thumbnail: resolved.thumbnail
         });
-        if (!infoRes.ok) return null;
-        const info = await infoRes.json();
-        if (!info || !info.auth_url) return null;
+      }
+    }
 
-        const authRes = await fetchWithCookies(info.auth_url, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept': 'application/json' }
+    // 2b. Simple text links without img (<a id="file" href="/f/SLUG">name.ext</a>)
+    const textLinkRegex = /<a[^>]+href=["']\/f\/([a-zA-Z0-9]+)["'][^>]*>([^<]+)<\/a>/gi;
+    let tl;
+    let textMatchCount = 0;
+    while ((tl = textLinkRegex.exec(html)) !== null && items.length < 50) {
+      textMatchCount++;
+      const fileId = tl[1];
+      const fileName = tl[2].trim();
+      console.log(`[CyberDrop] Step 2b: found fileId=${fileId} name=${fileName}`);
+      if (seen.has(fileId)) continue;
+      seen.add(fileId);
+      const resolved = await resolveCyberDropFile(fileId, null);
+      if (resolved) {
+        console.log(`[CyberDrop] Step 2b: resolved ${resolved.name}`);
+        items.push({
+          type: 'video', name: resolved.name, url: resolved.url,
+          ext: (resolved.type || '').split('/')[1] || 'mp4',
+          label: 'video', size: resolved.size, thumbnail: resolved.thumbnail
         });
-        if (!authRes.ok) return null;
-        const authData = await authRes.json();
-        if (!authData || !authData.url) return null;
-
-        return {
-          url: authData.url,
-          name: info.name || `cyberdrop_${slug}`,
-          size: info.size || 0,
-          type: info.type || 'video/mp4',
-          thumbnail: info.thumbnail_url || (thumb && isMediaUrl(thumb) ? thumb : null)
-        };
-      } catch (e) { return null; }
-    }
-
-    // ----- SINGLE FILE PAGE (/f/) -----
-    if (isFilePage) {
-      const slug = url.match(/\/[a-z]\/([a-zA-Z0-9]+)/)?.[1];
-      if (slug) {
-        const resolved = await resolveCyberDropFile(slug);
-        if (resolved) {
-          items.push({
-            type: 'video',
-            name: resolved.name,
-            url: resolved.url,
-            ext: (resolved.type || '').split('/')[1] || 'mp4',
-            label: 'video',
-            size: resolved.size,
-            thumbnail: resolved.thumbnail
-          });
-        }
-      }
-      // Fallback: only if API failed, try HTML parsing
-      if (items.length === 0) {
-        const ogVideo = html.match(/property=["']og:video["']\s+content=["']([^"']+)["']/i)
-                     || html.match(/content=["']([^"']+)["']\s+property=["']og:video["']/i);
-        if (ogVideo) addItem(ogVideo[1], extractOGImage(html) || thumbUrls[0] || null, 'video');
-      }
-      if (items.length === 0) {
-        console.log(`[CyberDrop] API + HTML fallback failed for ${url}`);
+      } else {
+        console.log(`[CyberDrop] Step 2b: FAILED to resolve ${fileId}`);
       }
     }
+    console.log(`[CyberDrop] Step 2b: ${textMatchCount} matches, ${items.length} items`);
 
-    // ----- ALBUM PAGE -----
-    else {
-      // 1. <a href="..."> with known extensions
-      const linkRegex = /href=["'](https?:\/\/[^"']+\.(?:mp4|mkv|webm|jpg|jpeg|png|webp|gif|mp3|wav))["']/gi;
-      let match;
-      let thumbIdx = 0;
-      while ((match = linkRegex.exec(html)) !== null) {
+    // 3. Fallback: video/img src attributes
+    if (items.length === 0) {
+      const fallbackRegex = /src=["'](https?:\/\/[^"']+\.(?:mp4|mkv|webm|mov|jpg|jpeg|png|webp|gif))["']/gi;
+      while ((match = fallbackRegex.exec(html)) !== null) {
         const mediaUrl = match[1];
         if (seen.has(mediaUrl)) continue;
         if (!isMediaUrl(mediaUrl)) continue;
         seen.add(mediaUrl);
         const { name, ext, type } = parseUrl(mediaUrl);
-        const thumbForItem = type === 'video' && thumbIdx < thumbUrls.length ? thumbUrls[thumbIdx++] : null;
-        items.push({ type, name, url: mediaUrl, ext, label: type, size: 0, thumbnail: thumbForItem });
-      }
-
-      // 2. <a href="/f/xxxxx"> file page links (common in albums)
-      // Each links to a file page; try to resolve via API
-      const fileLinkRegex = /<a[^>]*href=["'](?:\/f\/|https?:\/\/[^"']*\/f\/)([a-zA-Z0-9]+)["'][^>]*>[\s\S]*?<img[^>]*src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp|gif))["']/gi;
-      let fm;
-      while ((fm = fileLinkRegex.exec(html)) !== null && items.length < 50) {
-        const fileId = fm[1];
-        const thumbUrl = fm[2];
-        if (seen.has(fileId)) continue;
-        seen.add(fileId);
-        if (thumbUrls.length < 10 && !thumbUrls.includes(thumbUrl) && isMediaUrl(thumbUrl)) thumbUrls.push(thumbUrl);
-
-        const resolved = await resolveCyberDropFile(fileId, thumbUrl);
-        if (resolved) {
-          items.push({
-            type: 'video',
-            name: resolved.name,
-            url: resolved.url,
-            ext: (resolved.type || '').split('/')[1] || 'mp4',
-            label: 'video',
-            size: resolved.size,
-            thumbnail: resolved.thumbnail
-          });
-        }
-      }
-
-      // 3. Fallback: video/img src attributes
-      if (items.length === 0) {
-        const fallbackRegex = /src=["'](https?:\/\/[^"']+\.(?:mp4|mkv|webm|mov|jpg|jpeg|png|webp|gif))["']/gi;
-        while ((match = fallbackRegex.exec(html)) !== null) {
-          const mediaUrl = match[1];
-          if (seen.has(mediaUrl)) continue;
-          if (!isMediaUrl(mediaUrl)) continue;
-          seen.add(mediaUrl);
-          const { name, ext, type } = parseUrl(mediaUrl);
-          items.push({ type, name, url: mediaUrl, ext, label: type, size: 0 });
-        }
-      }
-
-      // 4. Try video source tags
-      if (items.length === 0) {
-        const videoSrcRegex = /<source[^>]+src=["'](https?:\/\/[^"']+\.(?:mp4|mkv|webm|mov))["']/gi;
-        while ((match = videoSrcRegex.exec(html)) !== null) {
-          const mediaUrl = match[1];
-          if (seen.has(mediaUrl)) continue;
-          if (!isMediaUrl(mediaUrl)) continue;
-          seen.add(mediaUrl);
-          const { name, ext } = parseUrl(mediaUrl);
-          items.push({ type: 'video', name, url: mediaUrl, ext, label: 'video', size: 0 });
-        }
+        items.push({ type, name, url: mediaUrl, ext, label: type, size: 0 });
       }
     }
 
-    if (items.length === 0 && isFilePage) {
-      console.warn(`[CyberDrop] No media found for ${url} — page may require JS to load video`);
+    // 4. Try video source tags
+    if (items.length === 0) {
+      const videoSrcRegex = /<source[^>]+src=["'](https?:\/\/[^"']+\.(?:mp4|mkv|webm|mov))["']/gi;
+      while ((match = videoSrcRegex.exec(html)) !== null) {
+        const mediaUrl = match[1];
+        if (seen.has(mediaUrl)) continue;
+        if (!isMediaUrl(mediaUrl)) continue;
+        seen.add(mediaUrl);
+        const { name, ext } = parseUrl(mediaUrl);
+        items.push({ type: 'video', name, url: mediaUrl, ext, label: 'video', size: 0 });
+      }
     }
-    return { title: pageTitle, url, items };
   }
+
+  if (items.length === 0 && isFilePage) {
+    console.warn(`[CyberDrop] No media found for ${url} — page may require JS to load video`);
+  }
+  return { title: pageTitle, url, items };
 }
 
 // 4. Bunkr Scraper (Supports single file resolution & albums)
@@ -810,45 +780,91 @@ async function resolveBunkrFile(fileSlug, baseUrl) {
     const html = await res.text();
 
     const cdnMatch = html.match(/var\s+jsCDN\s*=\s*"([^"]+)"/);
+    const dlLinkMatch = html.match(/href=["'](https?:\/\/dl\.bunkr\.[a-z]+\/file\/([0-9]+))["']/i);
     const coverMatch = html.match(/var\s+videoCoverUrl\s*=\s*"([^"]+)"/);
 
-    if (!cdnMatch) return null;
+    if (!cdnMatch && !dlLinkMatch) return null;
 
-    const rawCdn = cdnMatch[1].replace(/\\\//g, '/');
-    const thumbnail = coverMatch ? coverMatch[1].replace(/\\\//g, '/') : null;
+    let finalUrl, ext, name, thumbnail;
 
-    // Sign the CDN URL
-    const cdnUrl = new URL(rawCdn);
-    const path = decodeURIComponent(cdnUrl.pathname);
-    let signedUrl = rawCdn;
+    if (cdnMatch) {
+      // Strategy 1: CDN URL (jsCDN) — MP4/AVI files, needs signing
+      const rawCdn = cdnMatch[1].replace(/\\\//g, '/');
+      thumbnail = coverMatch ? coverMatch[1].replace(/\\\//g, '/') : null;
 
-    try {
-      const signRes = await fetch('https://glb-apisign.cdn.cr/sign?path=' + encodeURIComponent(path));
-      if (signRes.ok) {
-        const signData = await signRes.json();
-        cdnUrl.searchParams.set('token', signData.token);
-        cdnUrl.searchParams.set('ex', signData.ex);
-        signedUrl = cdnUrl.toString();
+      const cdnUrl = new URL(rawCdn);
+      const path = decodeURIComponent(cdnUrl.pathname);
+      finalUrl = rawCdn;
+
+      try {
+        const signRes = await fetch('https://glb-apisign.cdn.cr/sign?path=' + encodeURIComponent(path));
+        if (signRes.ok) {
+          const signData = await signRes.json();
+          cdnUrl.searchParams.set('token', signData.token);
+          cdnUrl.searchParams.set('ex', signData.ex);
+          finalUrl = cdnUrl.toString();
+        }
+      } catch (signErr) {
+        console.warn(`[Bunkr] Signing failed for ${fileSlug}: ${signErr.message}`);
       }
-    } catch (signErr) {
-      console.warn(`[Bunkr] Signing failed for ${fileSlug}: ${signErr.message}`);
+
+      ext = (rawCdn.match(/\.(\w{3,4})(?:\?|$)/) || [])[1]?.toLowerCase() || 'mp4';
+      name = fileSlug + '.' + ext;
+    } else {
+      // Strategy 2: API approach via dl.bunkr.cr/api/_001_v2 — WMV/TS files
+      // The download page fetches this API client-side to get the CDN URL
+      const fileId = dlLinkMatch[2];
+      try {
+        const apiRes = await fetch(new URL(dlLinkMatch[1]).origin + '/api/_001_v2', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          },
+          body: JSON.stringify({ id: fileId })
+        });
+
+        if (apiRes.ok) {
+          const meta = await apiRes.json();
+          const rawUrl = new URL(meta.mediafiles + meta.path);
+          if (meta.original) rawUrl.searchParams.set('n', meta.original);
+
+          const path = decodeURIComponent(rawUrl.pathname);
+          finalUrl = rawUrl.toString();
+          name = meta.original || fileSlug;
+
+          try {
+            const signRes = await fetch('https://glb-apisign.cdn.cr/sign?path=' + encodeURIComponent(path));
+            if (signRes.ok) {
+              const signData = await signRes.json();
+              rawUrl.searchParams.set('token', signData.token);
+              rawUrl.searchParams.set('ex', signData.ex);
+              finalUrl = rawUrl.toString();
+            }
+          } catch (signErr) {
+            console.warn(`[Bunkr] API signing failed for ${fileSlug}: ${signErr.message}`);
+          }
+        }
+      } catch (apiErr) {
+        console.warn(`[Bunkr] API failed for ${fileSlug}: ${apiErr.message}`);
+      }
+
+      if (!finalUrl) {
+        // Last resort: direct download page link (may not work for streaming)
+        finalUrl = dlLinkMatch[1];
+      }
+
+      const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+      if (!name) name = titleMatch ? titleMatch[1].replace(/\s*\|\s*Bunkr\s*$/i, '').trim() : fileSlug;
+      ext = (name.split('.').pop() || '').toLowerCase();
+      thumbnail = null;
     }
 
-    const extMatch = rawCdn.match(/\.(\w{3,4})(?:\?|$)/);
-    const ext = extMatch ? extMatch[1].toLowerCase() : 'mp4';
     let type = 'document';
-    if (['mp4', 'mkv', 'webm', 'mov'].includes(ext)) type = 'video';
+    if (['mp4', 'mkv', 'webm', 'mov', 'wmv', 'ts', 'avi'].includes(ext)) type = 'video';
     else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) type = 'image';
 
-    return {
-      type,
-      name: fileSlug + '.' + ext,
-      url: signedUrl,
-      ext,
-      label: type,
-      size: 0,
-      thumbnail
-    };
+    return { type, name, url: finalUrl, ext, label: type, size: 0, thumbnail };
   } catch (err) {
     console.error(`[Bunkr] Error resolving file ${fileSlug}:`, err.message);
     return null;
@@ -1247,6 +1263,7 @@ async function analyzePage(url) {
 const ZIP_CONCURRENCY = 3;
 
 async function runZipTask(taskId, items) {
+  const abortController = new AbortController();
   const task = {
     taskId,
     status: 'processing',
@@ -1256,7 +1273,8 @@ async function runZipTask(taskId, items) {
     speed: 0,
     startTime: Date.now(),
     error: null,
-    zipFilePath: path.join(TEMP_DIR, `${taskId}.zip`)
+    zipFilePath: path.join(TEMP_DIR, `${taskId}.zip`),
+    abortController
   };
 
   zipTasks.set(taskId, task);
@@ -1295,9 +1313,9 @@ async function runZipTask(taskId, items) {
         if (item.url.includes('erome.com')) {
           fetchHeaders['Referer'] = 'https://www.erome.com/';
         }
-        const itemRes = await fetch(item.url, { headers: fetchHeaders });
+        const itemRes = await fetch(item.url, { headers: fetchHeaders, signal: abortController.signal });
 
-        if (itemRes.ok) {
+        if (itemRes.ok && task.status !== 'cancelled') {
           const chunks = [];
           if (itemRes.body && typeof itemRes.body.getReader === 'function') {
             const reader = itemRes.body.getReader();
@@ -1321,6 +1339,7 @@ async function runZipTask(taskId, items) {
           errors.push({ name: item.name, status: itemRes.status });
         }
       } catch (err) {
+        if (err.name === 'AbortError') return;
         console.error(`[ZIP] Task ${taskId}: fetch error for ${item.name}: ${err.message}`);
         errors.push({ name: item.name, error: err.message });
       }
@@ -1357,11 +1376,18 @@ async function runZipTask(taskId, items) {
         task.error = `${errors.length} file(s) failed to download`;
       }
       console.log(`[ZIP] Task ${taskId}: completed (${items.length - errors.length}/${items.length} files)`);
+    } else {
+      archive.destroy();
+      output.destroy();
     }
   } catch (err) {
     task.status = 'error';
     task.error = err.message;
     console.error(`[ZIP] Task ${taskId}: fatal error - ${err.message}`);
+    try { if (fs.existsSync(task.zipFilePath)) fs.unlinkSync(task.zipFilePath); } catch (e) {}
+    archive.destroy();
+    output.destroy();
+    zipTasks.delete(taskId);
   }
 }
 
@@ -1658,6 +1684,9 @@ const server = http.createServer(async (req, res) => {
     if (task) {
       console.log(`[ZIP] Cancelling task: ${taskId}`);
       task.status = 'cancelled';
+      if (task.abortController) {
+        task.abortController.abort();
+      }
       if (fs.existsSync(task.zipFilePath)) {
         try { fs.unlinkSync(task.zipFilePath); } catch (e) {}
       }

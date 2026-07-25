@@ -13,6 +13,10 @@ export function getActiveDownloads() {
   return activeDownloads;
 }
 
+export function dismissDownload(ad) {
+  cleanup(ad);
+}
+
 function notifyChange() {
   if (_onChange) _onChange(activeDownloads);
 }
@@ -219,8 +223,8 @@ function onError(ad, message) {
 }
 
 function cleanup(ad) {
-  if (!ad || ad._done) return;
-  ad._done = true;
+  if (!ad || ad._cleanedUp) return;
+  ad._cleanedUp = true;
   if (ad.speedInterval) {
     clearInterval(ad.speedInterval);
     ad.speedInterval = null;

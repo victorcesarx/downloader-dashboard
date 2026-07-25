@@ -1,4 +1,4 @@
-import { getActiveDownloads, setOnChange } from './downloader.js';
+import { getActiveDownloads, setOnChange, dismissDownload } from './downloader.js';
 import { formatBytes, formatSpeed } from './utils.js';
 import { t } from './i18n.js';
 
@@ -14,22 +14,28 @@ function getOrCreatePanel() {
   panel.innerHTML = `
     <div class="queue-panel-header">
       <h4>${t('queue.title')}</h4>
-      <button class="queue-panel-close btn btn-icon" aria-label="${t('actions.close')}" title="${t('actions.close')}">&times;</button>
+      <div class="queue-panel-header-actions">
+        <button class="btn btn-secondary btn-sm queue-clear-done" title="${t('queue.clear_done')}" style="display:none;">${t('queue.clear_done')}</button>
+        <button class="queue-panel-close btn btn-icon" aria-label="${t('actions.close')}" title="${t('actions.close')}">&times;</button>
+      </div>
     </div>
     <div class="queue-panel-body"></div>
   `;
   document.body.appendChild(panel);
 
   panel.querySelector('.queue-panel-close').addEventListener('click', toggleQueue);
+  panel.querySelector('.queue-clear-done').addEventListener('click', clearCompleted);
   panel.querySelector('.queue-panel-body').addEventListener('click', (e) => {
     const target = e.target.closest('button');
     if (!target) return;
     const { action, id } = target.dataset;
+    if (action === 'clear-done') { clearCompleted(); return; }
     if (!action || !id) return;
     const ad = getActiveDownloads().get(id);
     if (!ad) return;
     if (action === 'pause') togglePause(ad);
     if (action === 'cancel') cancelDownload(ad);
+    if (action === 'dismiss') dismissDownload(ad);
   });
 
   return panel;
@@ -48,6 +54,9 @@ function getOrCreateBadge() {
 function renderList() {
   const body = panel.querySelector('.queue-panel-body');
   const downloads = [...getActiveDownloads().values()];
+  const hasDone = downloads.some(ad => ad._done);
+  const clearBtn = panel.querySelector('.queue-clear-done');
+  clearBtn.style.display = hasDone ? '' : 'none';
 
   if (downloads.length === 0) {
     body.innerHTML = `<div class="queue-panel-empty">${t('queue.empty')}</div>`;
@@ -100,7 +109,8 @@ function renderList() {
 }
 
 function updateBadge() {
-  const count = getActiveDownloads().size;
+  const downloads = [...getActiveDownloads().values()];
+  const count = downloads.filter(ad => !ad._done).length;
   const b = getOrCreateBadge();
   if (!b) return;
   if (count > 0) {
@@ -149,4 +159,10 @@ function togglePause(ad) {
 
 function cancelDownload(ad) {
   ad.controller.abort();
+}
+
+function clearCompleted() {
+  for (const ad of getActiveDownloads().values()) {
+    if (ad._done) dismissDownload(ad);
+  }
 }

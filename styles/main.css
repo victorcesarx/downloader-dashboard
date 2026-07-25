@@ -1463,6 +1463,18 @@ a:hover {
   border-bottom: 1px solid var(--glass-border);
 }
 
+.queue-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.queue-clear-done {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
 .queue-panel-close {
   background: none;
   border: none;
@@ -1600,6 +1612,85 @@ a:hover {
   width: 100%;
   padding: 4px 8px;
   font-size: 0.75rem;
+}
+
+/* Virtual Scroll */
+.media-container.virtual-scroll {
+  display: block !important;
+  overflow-y: auto;
+  position: relative;
+}
+.vs-wrapper {
+  position: relative;
+  width: 100%;
+}
+.vs-wrapper .media-card {
+  position: absolute;
+  margin: 0;
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Rename Overlay */
+.rename-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.rename-dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  min-width: 320px;
+  max-width: 90vw;
+  box-shadow: var(--glass-shadow);
+}
+.rename-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.rename-input-group {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  transition: border-color var(--transition-fast);
+}
+.rename-input-group:focus-within {
+  border-color: var(--accent-primary);
+}
+.rename-input {
+  flex: 1;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 0.9rem;
+  min-width: 0;
+}
+.rename-input-suffix {
+  padding: 10px 12px 10px 0;
+  font-family: var(--font-main);
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  user-select: none;
+  pointer-events: none;
+}
+.rename-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 /* Responsive Media Queries */

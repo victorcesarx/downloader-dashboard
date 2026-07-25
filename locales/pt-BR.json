@@ -68,7 +68,8 @@
     "downloading": "Baixando...",
     "paused": "Pausado",
     "error": "Ocorreu um erro ao processar o link. Verifique a URL e tente novamente.",
-    "filter_empty": "Nenhum resultado para os filtros atuais."
+    "filter_empty": "Nenhum resultado para os filtros atuais.",
+    "clear_filters": "Limpar filtros"
   },
   "zip": {
     "title": "Download em Lote (ZIP)",
@@ -79,7 +80,9 @@
     "speed": "Velocidade: {speed}",
     "estimated_bytes": "Tamanho processado: {bytes}",
     "start_error": "Falha ao iniciar empacotamento ZIP",
-    "task_error": "Task cancelada ou com erro"
+    "task_error": "Task cancelada ou com erro",
+    "rename_label": "Nomeie seu arquivo ZIP",
+    "start": "Iniciar ZIP"
   },
   "modal": {
     "preview_title": "Visualizar Mídia",
@@ -96,7 +99,8 @@
   },
   "queue": {
     "title": "Downloads Ativos",
-    "empty": "Nenhum download em andamento"
+    "empty": "Nenhum download em andamento",
+    "clear_done": "Limpar concluídos"
   },
   "toast": {
     "analyzed_success": "Mídias extraídas com sucesso!",

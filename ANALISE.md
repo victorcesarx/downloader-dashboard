@@ -29,6 +29,26 @@ downloader-dashboard/
 │   └── zip-download.js            # Download ZIP em lote (199 linhas)
 ├── styles/
 │   └── main.css                   # Design system + componentes (~1560 linhas)
+├── server/                        # Módulos do servidor
+│   ├── config.js                  # Constantes, cert HTTPS, TEMP_DIR
+│   ├── utils.js                   # MIME_TYPES, CACHE_DURATIONS, cookieJar, fetch
+│   ├── scrapers/
+│   │   ├── index.js               # Router de scrapers
+│   │   ├── gofile.js              # Scraper GoFile (API + fallback HTML)
+│   │   ├── pixeldrain.js          # Scraper PixelDrain (API)
+│   │   ├── cyberdrop.js           # Scraper CyberDrop (HTML + CDN)
+│   │   ├── bunkr.js               # Scraper Bunkr (CDN + signing)
+│   │   ├── generic.js             # Scraper genérico (regex + script)
+│   │   ├── erome.js               # Scraper Erome (HTML)
+│   │   └── twitter.js             # Scraper Twitter/X (HTML)
+│   ├── middleware/
+│   │   ├── auth.js                # requireAuth, sendUnauthorized, getLoginPage
+│   │   ├── body-collector.js      # collectBody com limite de tamanho
+│   │   ├── rate-limit.js          # Rate limiting por IP
+│   │   └── ssrf.js                # Proteção SSRF (IPv4 + IPv6 + DNS)
+│   ├── proxy.js                   # Proxy handler com Range + redirects
+│   ├── static.js                  # Servir arquivos estáticos com gzip + cache
+│   └── zip.js                     # ZIP batch: runZipTask, cleanupOrphanedZips
 ├── tests/
 │   ├── setup.js                   # Setup do Vitest (matchMedia mock)
 │   ├── backend/
@@ -39,7 +59,7 @@ downloader-dashboard/
 │       ├── state.test.js          # Testes de state (6 testes)
 │       └── i18n.test.js           # Testes de i18n (12 testes)
 ├── temp_zips/                     # Diretório temporário para arquivos ZIP
-├── server.js                      # Servidor HTTP Node.js (~1860 linhas)
+├── server.js                      # Servidor HTTP Node.js (~244 linhas, ~70% redução)
 ├── index.html                     # SPA: Landing + Dashboard integrados (~195 linhas)
 ├── dashboard.html                 # Versão standalone do dashboard (~153 linhas)
 ├── vitest.config.js               # Configuração do Vitest
@@ -66,9 +86,37 @@ downloader-dashboard/
 
 ## 4. Arquitetura e Fluxo
 
-### 4.1 Servidor (`server.js`) — ~1860 linhas
+### 4.1 Servidor (`server.js` + `server/`) — ~244 + ~662 linhas
 
-Servidor HTTP puro (sem Express) na porta **3006**. Endpoints:
+Servidor HTTP puro (sem Express) na porta **3006**, modularizado em camadas:
+
+**server.js** (~244 linhas, ~70% menor) — orquestrador principal:
+- Criação do servidor HTTP + roteamento
+- Startup (HTTP/HTTPS)
+- Re-exporta módulos para compatibilidade com testes
+
+**server/config.js** — constantes e setup inicial:
+- PORT, TEMP_DIR, AUTH_TOKEN, limites de body/rate-limit
+- Carregamento de certificados HTTPS
+- Criação do diretório temp_zips
+
+**server/scrapers/** — scrapers específicos + genérico (vide seção 4.2)
+
+**server/middleware/** — camada intermediária:
+- `auth.js`: `requireAuth()`, `sendUnauthorized()`, página de login
+- `body-collector.js`: `collectBody()` com limite de tamanho
+- `rate-limit.js`: rate limiting por IP com cleanup automático
+- `ssrf.js`: proteção contra IPs privados (IPv4, IPv6, DNS lookup)
+
+**server/proxy.js** — proxy handler completo com Range headers, redirects, SSRF
+
+**server/static.js** — servir arquivos estáticos com gzip + cache headers + auth
+
+**server/zip.js** — gerenciamento de tasks ZIP assíncronas:
+- `runZipTask()` com concorrência limitada, AbortController, progresso
+- `cleanupOrphanedZips()` — limpeza periódica de arquivos órfãos (>30 min)
+
+**Endpoints:**
 
 **POST `/analyze`**
 - Recebe `{"url": "..."}`
@@ -101,7 +149,9 @@ Servidor HTTP puro (sem Express) na porta **3006**. Endpoints:
 - Cache headers diferenciados por extensão de arquivo
 - Limpeza periódica de arquivos ZIP órfãos (a cada 5 min, remove >30 min)
 - Suporte a HTTPS (opcional, via certs/cert.pem + key.pem)
-- Bloqueio de SSRF (proteção contra IPs privados)
+- Rate limiting por IP (20 req/min no /analyze)
+- Bloqueio de SSRF (proteção contra IPs privados, IPv6, DNS rebinding)
+- Content-Security-Policy restritiva em páginas HTML
 - Guarda `process.env.VITEST` para não iniciar servidor durante testes
 
 ### 4.2 Scrapers
@@ -209,15 +259,17 @@ O download em lote segue este fluxo:
 ## 6. Qualidade do Código
 
 ### Pontos Fortes
-- **Server.js** modular com scrapers especializados por site + fallback genérico
-- Tratamento de erros robusto (timeouts, retry, validação de Content-Type)
+- **Server.js** modularizado em camadas: scrapers dedicados, middleware, proxy, ZIP, static — 70% menor (~244 linhas)
+- **Regra do projeto:** todo novo scraper específico deve ser criado em `server/scrapers/` como arquivo dedicado, seguindo o padrão dos existentes (exportar função scrapeXxx + manter lógica isolada)
+- Tratamento de erros robusto (timeouts, retry exponencial, validação de Content-Type)
 - ZIP task com isolamento (Map), AbortController, cleanup programado de órfãos
 - Frontend modular com ES modules (sem dependências globais)
 - CSS bem organizado com variáveis e animações performáticas
 - i18n completo: locales carregados via fetch assíncrono + resolução por chave aninhada
 - SPA router leve para navegação sem recarregar página
 - Stream seguro: error handlers, `unhandledRejection` handler
-- Proteção SSRF no proxy (bloqueio de IPs privados)
+- Proteção SSRF no proxy (bloqueio de IPs privados, IPv6, DNS lookup)
+- Rate limiting por IP com cleanup automático (20 req/min no /analyze)
 - Testes automatizados com Vitest (73 testes, backend + frontend + integração HTTP)
 - Modal acessível com ARIA `role="dialog"`, `aria-modal`, `aria-labelledby`, foco restaurado
 - Estado gerenciado com `structuredClone` para mutations imutáveis
@@ -229,9 +281,8 @@ O download em lote segue este fluxo:
 - **Sem bundler ou build step** (JS/CSS puro)
 - **Sem Dockerfile** para deploy
 - **Versionamento do package.json** defasado (1.1.0, mas commits mencionam v1.3.0)
-- **Rate limiting ausente** — `/analyze` e `/proxy` sem proteção contra abuso
-- **SSRF hardening incompleto** — IPv6, DNS rebinding não bloqueados
-- **Sem Content-Security-Policy** headers
+
+- **GoFile** — API sofre rate limiting facilmente; fallback HTML não captura conteúdo SPA
 
 ---
 
@@ -256,12 +307,11 @@ O download em lote segue este fluxo:
 ## 8. Recomendações
 
 1. **Modularizar renderer.js** (separar card, modal, grid, skeleton, batch) — ~512 linhas atualmente
-2. **Adicionar build step** (esbuild ou vite) para minificação
-3. **Adicionar Dockerfile** para deploy
-4. **Adicionar service worker** para cache de assets e PWA
-5. **Suporte a mais fontes** (YouTube, Vimeo, Instagram, Google Drive)
-6. **Sincronizar versionamento** entre git e package.json
-7. **Rate limiting** no servidor para endpoints POST
-8. **SSRF hardening** — bloquear IPv6, notação alternativa de IP, DNS rebinding
-9. **Keyboard shortcuts** — Ctrl+Enter para analisar, atalhos de navegação nos cards
-10. **Virtual scrolling** — substituir lazy loading atual para listas com 1000+ itens
+2. **Manter padrão de scrapers dedicados** — todo novo scraper específico deve ser criado em `server/scrapers/` como arquivo individual (ex.: `server/scrapers/youtube.js`), registrado em `server/scrapers/index.js`, sem poluir `server.js` ou `server/scrapers/generic.js`. O padrão atual garante isolamento de lógica e facilita manutenção.
+3. **Adicionar build step** (esbuild ou vite) para minificação
+4. **Adicionar Dockerfile** para deploy
+5. **Adicionar service worker** para cache de assets e PWA
+6. **Suporte a mais fontes** (YouTube, Vimeo, Instagram, Google Drive)
+7. **Sincronizar versionamento** entre git e package.json
+8. **Keyboard shortcuts** — Ctrl+Enter para analisar, atalhos de navegação nos cards
+9. **Virtual scrolling** — substituir lazy loading atual para listas com 1000+ itens

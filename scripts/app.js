@@ -265,4 +265,15 @@ function setupEventListeners() {
       renderMediaContainer();
     }
   });
+
+  window.__clearFilters = function () {
+    const searchInput = document.getElementById('search-filter-input');
+    if (searchInput) searchInput.value = '';
+    store.state.activeFilter = 'all';
+    store.state.searchQuery = '';
+    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+    const allPill = document.querySelector('.filter-pill[data-filter="all"]');
+    if (allPill) allPill.classList.add('active');
+    renderMediaContainer();
+  };
 }

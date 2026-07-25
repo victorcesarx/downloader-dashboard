@@ -1,5 +1,5 @@
 import { store } from './state.js';
-import { Toast, formatBytes, formatSpeed, formatDuration, apiFetch, playBeep } from './utils.js';
+import { Toast, formatBytes, formatSpeed, formatDuration, apiFetch, playBeep, sanitizeHtml } from './utils.js';
 import { t } from './i18n.js';
 
 const activeTasks = new Map();
@@ -13,6 +13,9 @@ export async function startZipDownload() {
     Toast.show(t('toast.no_media_selected'), 'warning');
     return;
   }
+
+  const zipName = await promptZipName();
+  if (zipName === null) return;
 
   try {
     const res = await apiFetch('/download-zip', {
@@ -32,12 +35,13 @@ export async function startZipDownload() {
     const data = await res.json();
     const taskId = data.taskId;
 
-    activeTasks.set(taskId, true);
+    const finalName = (zipName || 'webscope_media_pack');
+    activeTasks.set(taskId, finalName.endsWith('.zip') ? finalName : finalName + '.zip');
 
     const totalBytes = selectedItems.reduce((sum, i) => sum + (i.size || 0), 0);
     store.state.activeZipTask = { taskId, total: selectedItems.length, totalBytes, progress: 0 };
     updateNavbarZipProgress(0, selectedItems.length);
-    renderZipPanel(taskId, selectedItems.length, totalBytes);
+    renderZipPanel(taskId, selectedItems.length, totalBytes, zipName);
     startPollingStatus(taskId);
   } catch (err) {
     console.error('ZIP start error:', err);
@@ -45,11 +49,12 @@ export async function startZipDownload() {
   }
 }
 
-function renderZipPanel(taskId, totalFiles, totalBytes) {
+function renderZipPanel(taskId, totalFiles, totalBytes, zipName) {
   const panel = document.createElement('div');
   panel.id = `zip-panel-${taskId}`;
   panel.className = 'zip-panel';
   panel.dataset.taskId = taskId;
+  if (zipName) panel.dataset.zipName = zipName;
 
   // Stack panels vertically — offset by existing panels
   const existing = document.querySelectorAll('.zip-panel:not(.closing)');
@@ -173,9 +178,14 @@ function onZipCompleted(taskId) {
 
   if (progressWrap) {
     const token = localStorage.getItem('downdash_token');
-    const resultUrl = `/download-zip/result/${taskId}${token ? `?token=${token}` : ''}`;
+    let customName = activeTasks.get(taskId) || panel.dataset.zipName || 'webscope_media_pack.zip';
+    if (!customName.endsWith('.zip')) customName += '.zip';
+    const params = new URLSearchParams();
+    if (token) params.set('token', token);
+    params.set('filename', customName);
+    const resultUrl = `/download-zip/result/${taskId}?${params}`;
     progressWrap.innerHTML = `
-      <a href="${resultUrl}" class="btn btn-primary btn-sm" style="width:100%;" download="webscope_media_pack.zip">
+      <a href="${resultUrl}" class="btn btn-primary btn-sm" style="width:100%;" download="${sanitizeHtml(customName)}">
         ${t('zip.download_btn')}
       </a>
     `;
@@ -214,5 +224,48 @@ function restackZipPanels() {
   const panels = document.querySelectorAll('.zip-panel:not(.closing)');
   panels.forEach((p, i) => {
     p.style.bottom = `${24 + i * 175}px`;
+  });
+}
+
+function promptZipName() {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'rename-overlay';
+    overlay.innerHTML = `
+      <div class="rename-dialog">
+        <label class="rename-label">${t('zip.rename_label')}</label>
+        <div class="rename-input-group">
+          <input class="rename-input" type="text" value="webscope_media_pack" spellcheck="false" autofocus>
+          <span class="rename-input-suffix">.zip</span>
+        </div>
+        <div class="rename-actions">
+          <button class="btn btn-secondary btn-sm rename-cancel">${t('actions.cancel')}</button>
+          <button class="btn btn-primary btn-sm rename-confirm">${t('zip.start')}</button>
+        </div>
+      </div>
+    `;
+
+    const input = overlay.querySelector('.rename-input');
+    const confirmBtn = overlay.querySelector('.rename-confirm');
+    const cancelBtn = overlay.querySelector('.rename-cancel');
+
+    function close(result) {
+      overlay.remove();
+      document.body.style.overflow = '';
+      resolve(result);
+    }
+
+    confirmBtn.addEventListener('click', () => close((input.value.trim() || 'webscope_media_pack') + '.zip'));
+    cancelBtn.addEventListener('click', () => close(null));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') confirmBtn.click();
+      if (e.key === 'Escape') cancelBtn.click();
+    });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cancelBtn.click();
+    });
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => input.select());
   });
 }

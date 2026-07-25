@@ -4,10 +4,30 @@ import { t } from './i18n.js';
 import { downloadSingleItem } from './download.js';
 
 const BATCH_SIZE = 20;
+const VIRTUAL_SCROLL_THRESHOLD = 200;
 let renderedCount = 0;
 let lazyObserver = null;
 let currentFiltered = [];
 let _animatingOut = false;
+
+// Virtual scroll state
+let vs = {
+  active: false,
+  container: null,
+  wrapper: null,
+  items: [],
+  viewMode: 'grid',
+  columns: 4,
+  gap: 20,
+  cardWidth: 280,
+  cardHeight: 340,
+  totalHeight: 0,
+  visibleStart: 0,
+  visibleEnd: 0,
+  lastScrollTop: 0,
+  rafId: null,
+  selectedItemIds: new Set(),
+};
 
 export function renderSkeletons(container, count = 6) {
   if (!container) return;
@@ -111,6 +131,7 @@ function observeSentinel(container) {
 }
 
 function resetLazyState() {
+  vsCleanup();
   renderedCount = 0;
   currentFiltered = [];
 }
@@ -183,6 +204,7 @@ export function renderMediaContainer() {
           </svg>
         </div>
         <h3>${items.length === 0 ? t('status.empty') : t('status.filter_empty')}</h3>
+        ${items.length > 0 ? `<button class="btn btn-secondary btn-sm" style="margin-top:16px" onclick="window.__clearFilters()">${t('status.clear_filters')}</button>` : ''}
       </div>
     `;
     resetLazyState();
@@ -205,7 +227,13 @@ export function renderMediaContainer() {
 }
 
 function doActualRender(container) {
-  const { viewMode, thumbBlurred } = store.state;
+  const { viewMode, thumbBlurred, selectedItemIds } = store.state;
+  vsCleanup();
+
+  if (currentFiltered.length >= VIRTUAL_SCROLL_THRESHOLD) {
+    vsInit(container);
+    return;
+  }
 
   container.classList.toggle('grid-view', viewMode === 'grid' || viewMode === 'compact');
   container.classList.toggle('list-view', viewMode === 'list');
@@ -230,117 +258,129 @@ function doActualRender(container) {
   // Lazy size fetch
   requestAnimationFrame(() => lazySizeFetch(container));
 
-  attachCardEvents(container);
+  attachCardEvents(container, false);
 }
 
-function attachCardEvents(container) {
+function attachCardEvents(container, useDelegation = false) {
+  if (useDelegation) {
+    container.addEventListener('change', (e) => {
+      const cb = e.target.closest('.card-checkbox');
+      const sel = e.target.closest('.quality-select');
+      if (cb) handleCheckboxChange(cb);
+      if (sel) handleQualityChange(sel);
+    });
+    container.addEventListener('click', (e) => {
+      const db = e.target.closest('.download-btn');
+      const pb = e.target.closest('.preview-btn');
+      const cb = e.target.closest('.copy-link-btn');
+      if (db) handleDownloadClick(db);
+      if (pb) handlePreviewClick(pb);
+      if (cb) handleCopyClick(cb);
+    });
+    return;
+  }
+
   container.querySelectorAll('.card-checkbox').forEach(cb => {
-    cb.addEventListener('change', (e) => {
-      const id = e.target.getAttribute('data-id');
-      const next = new Set(store.state.selectedItemIds);
-      if (e.target.checked) {
-        next.add(id);
-      } else {
-        next.delete(id);
-      }
-      store.state.selectedItemIds = next;
-      const card = e.target.closest('.media-card');
-      if (card) {
-        card.classList.toggle('selected', e.target.checked);
-      }
-      updateBatchActionsUI();
-    });
+    cb.addEventListener('change', () => handleCheckboxChange(cb));
   });
-
   container.querySelectorAll('.download-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const id = e.target.getAttribute('data-id');
-      const item = store.state.items.find(i => i.id === id);
-      const cardEl = e.target.closest('.media-card');
-      if (item) {
-        if (item.openInBrowser) {
-          window.open(item.url, '_blank');
-        } else {
-          downloadSingleItem(item, cardEl);
-        }
-      }
-    });
+    btn.addEventListener('click', () => handleDownloadClick(btn));
   });
-
   container.querySelectorAll('.quality-select').forEach(sel => {
-    sel.addEventListener('change', (e) => {
-      const id = e.target.getAttribute('data-id');
-      const items = store.state.items;
-      const idx = items.findIndex(i => i.id === id);
-      if (idx === -1) return;
-      const item = items[idx];
-      if (!item || !item.qualities) return;
-      const qIdx = parseInt(e.target.value, 10);
-      const q = item.qualities[qIdx];
-      if (!q) return;
-      const updated = structuredClone(item);
-      updated.selectedQualityIndex = qIdx;
-      updated.url = q.url;
-      updated.proxyUrl = q.proxyUrl;
-      if (q.size > 0) {
-        updated.size = q.size;
-      } else {
-        updated.size = estimateFileSize(q.width, q.height);
-        fetch(q.proxyUrl, { headers: { Range: 'bytes=0-0' } }).then(r => {
-          const cr = r.headers.get('content-range');
-          if (cr) {
-            const m = cr.match(/(\d+)$/);
-            if (m) {
-              const items2 = store.state.items;
-              const idx2 = items2.findIndex(i => i.id === id);
-              if (idx2 !== -1) {
-                const updated2 = structuredClone(items2[idx2]);
-                updated2.size = parseInt(m[1], 10);
-                const newItems2 = [...items2];
-                newItems2[idx2] = updated2;
-                store.state.items = newItems2;
-              }
-              updateCardSize(id, parseInt(m[1], 10));
-            }
-          }
-        }).catch(() => {});
-      }
-      const newItems = [...items];
-      newItems[idx] = updated;
-      store.state.items = newItems;
-      const card = container.querySelector(`.media-card[data-id="${id}"]`);
-      const sizeEl = card?.querySelector('.card-meta span:last-of-type');
-      if (sizeEl) sizeEl.textContent = formatBytes(updated.size);
-    });
+    sel.addEventListener('change', () => handleQualityChange(sel));
   });
-
   container.querySelectorAll('.preview-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const id = e.target.getAttribute('data-id');
-      const item = store.state.items.find(i => i.id === id);
-      if (item) {
-        if (item.openInBrowser) {
-          window.open(item.url, '_blank');
-        } else {
-          openPreviewModal(item);
+    btn.addEventListener('click', () => handlePreviewClick(btn));
+  });
+  container.querySelectorAll('.copy-link-btn').forEach(btn => {
+    btn.addEventListener('click', () => handleCopyClick(btn));
+  });
+}
+
+function handleCheckboxChange(cb) {
+  const id = cb.getAttribute('data-id');
+  const next = new Set(store.state.selectedItemIds);
+  if (cb.checked) next.add(id); else next.delete(id);
+  store.state.selectedItemIds = next;
+  const card = cb.closest('.media-card');
+  if (card) card.classList.toggle('selected', cb.checked);
+  updateBatchActionsUI();
+}
+
+function handleDownloadClick(btn) {
+  const id = btn.getAttribute('data-id');
+  const item = store.state.items.find(i => i.id === id);
+  const cardEl = btn.closest('.media-card');
+  if (item) {
+    if (item.openInBrowser) window.open(item.url, '_blank');
+    else downloadSingleItem(item, cardEl);
+  }
+}
+
+function handlePreviewClick(btn) {
+  const id = btn.getAttribute('data-id');
+  const item = store.state.items.find(i => i.id === id);
+  if (item) {
+    if (item.openInBrowser) window.open(item.url, '_blank');
+    else openPreviewModal(item);
+  }
+}
+
+async function handleCopyClick(btn) {
+  const id = btn.getAttribute('data-id');
+  const item = store.state.items.find(i => i.id === id);
+  if (!item || !item.url) return;
+  try {
+    await navigator.clipboard.writeText(item.url);
+    Toast.show(t('toast.copied'), 'success');
+  } catch {
+    Toast.show(t('toast.copy_failed'), 'error');
+  }
+}
+
+function handleQualityChange(sel) {
+  const id = sel.getAttribute('data-id');
+  const items = store.state.items;
+  const idx = items.findIndex(i => i.id === id);
+  if (idx === -1) return;
+  const item = items[idx];
+  if (!item || !item.qualities) return;
+  const qIdx = parseInt(sel.value, 10);
+  const q = item.qualities[qIdx];
+  if (!q) return;
+  const updated = structuredClone(item);
+  updated.selectedQualityIndex = qIdx;
+  updated.url = q.url;
+  updated.proxyUrl = q.proxyUrl;
+  if (q.size > 0) {
+    updated.size = q.size;
+  } else {
+    updated.size = estimateFileSize(q.width, q.height);
+    fetch(q.proxyUrl, { headers: { Range: 'bytes=0-0' } }).then(r => {
+      const cr = r.headers.get('content-range');
+      if (cr) {
+        const m = cr.match(/(\d+)$/);
+        if (m) {
+          const items2 = store.state.items;
+          const idx2 = items2.findIndex(i => i.id === id);
+          if (idx2 !== -1) {
+            const updated2 = structuredClone(items2[idx2]);
+            updated2.size = parseInt(m[1], 10);
+            const newItems2 = [...items2];
+            newItems2[idx2] = updated2;
+            store.state.items = newItems2;
+          }
+          updateCardSize(id, parseInt(m[1], 10));
         }
       }
-    });
-  });
-
-  container.querySelectorAll('.copy-link-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const id = e.target.getAttribute('data-id');
-      const item = store.state.items.find(i => i.id === id);
-      if (!item || !item.url) return;
-      try {
-        await navigator.clipboard.writeText(item.url);
-        Toast.show(t('toast.copied'), 'success');
-      } catch {
-        Toast.show(t('toast.copy_failed'), 'error');
-      }
-    });
-  });
+    }).catch(() => {});
+  }
+  const newItems = [...items];
+  newItems[idx] = updated;
+  store.state.items = newItems;
+  const card = document.querySelector(`.media-card[data-id="${id}"]`);
+  const sizeEl = card?.querySelector('.card-meta span:last-of-type');
+  if (sizeEl) sizeEl.textContent = formatBytes(updated.size);
 }
 
 export function updateBatchActionsUI() {
@@ -382,13 +422,21 @@ export function updateBatchActionsUI() {
 }
 
 export function updateCardSize(id, size) {
-  const card = document.querySelector(`.media-card[data-id="${id}"]`);
+  const selector = `.media-card[data-id="${id}"]`;
+  let card = document.querySelector(selector);
+  if (!card && vs.active && vs.wrapper) {
+    card = vs.wrapper.querySelector(selector);
+  }
   const sizeEl = card?.querySelector('.card-meta span:last-of-type');
   if (sizeEl) sizeEl.textContent = formatBytes(size);
 }
 
 export function updateCardSelection(id, selected) {
-  const card = document.querySelector(`.media-card[data-id="${id}"]`);
+  const selector = `.media-card[data-id="${id}"]`;
+  let card = document.querySelector(selector);
+  if (!card && vs.active && vs.wrapper) {
+    card = vs.wrapper.querySelector(selector);
+  }
   if (!card) return;
   card.classList.toggle('selected', selected);
   const cb = card.querySelector('.card-checkbox');
@@ -397,18 +445,156 @@ export function updateCardSelection(id, selected) {
 
 export function updateAllCardSelections() {
   const { selectedItemIds } = store.state;
-  document.querySelectorAll('.media-card').forEach(card => {
+  const cards = document.querySelectorAll('.media-card');
+  cards.forEach(card => {
     const id = card.getAttribute('data-id');
     const sel = selectedItemIds.has(id);
     card.classList.toggle('selected', sel);
     const cb = card.querySelector('.card-checkbox');
     if (cb) cb.checked = sel;
   });
+  if (vs.active) vs.selectedItemIds = new Set(selectedItemIds);
 }
 
 export function toggleBlur() {
   const container = document.getElementById('media-container');
-  if (container) container.classList.toggle('thumb-blurred', store.state.thumbBlurred);
+  if (!container) return;
+  container.classList.toggle('thumb-blurred', store.state.thumbBlurred);
+  if (vs.active) vs.container?.classList.toggle('thumb-blurred', store.state.thumbBlurred);
+}
+
+// Virtual scroll functions
+function vsCleanup() {
+  if (!vs.active) return;
+  vs.active = false;
+  if (vs.container) {
+    vs.container.removeEventListener('scroll', vsOnScroll);
+    vs.container.style.maxHeight = '';
+  }
+  window.removeEventListener('resize', vsOnResize);
+  if (vs.rafId) { cancelAnimationFrame(vs.rafId); vs.rafId = null; }
+  vs.container = null;
+  vs.wrapper = null;
+}
+
+function vsInit(container) {
+  const viewMode = store.state.viewMode;
+  vs.active = true;
+  vs.container = container;
+  vs.items = currentFiltered;
+  vs.viewMode = viewMode;
+  vs.selectedItemIds = new Set(store.state.selectedItemIds);
+
+  container.classList.remove('grid-view', 'list-view', 'compact-view');
+  container.classList.add('virtual-scroll');
+
+  const top = container.getBoundingClientRect().top;
+  container.style.maxHeight = `calc(100vh - ${top + 24}px)`;
+
+  vs.wrapper = document.createElement('div');
+  vs.wrapper.className = 'vs-wrapper';
+  container.innerHTML = '';
+  container.appendChild(vs.wrapper);
+
+  vsMeasure();
+  vsRender();
+  attachCardEvents(vs.wrapper, true);
+
+  container.addEventListener('scroll', vsOnScroll, { passive: true });
+  window.addEventListener('resize', vsOnResize, { passive: true });
+}
+
+function vsMeasure() {
+  const w = vs.container.clientWidth;
+  const gap = vs.viewMode === 'compact' ? 12 : vs.viewMode === 'list' ? 12 : 20;
+  vs.gap = gap;
+
+  if (vs.viewMode === 'list') {
+    vs.columns = 1;
+    vs.cardWidth = w;
+    vs.cardHeight = 80;
+  } else if (vs.viewMode === 'compact') {
+    const minW = 180;
+    vs.columns = Math.max(1, Math.floor((w + gap) / (minW + gap)));
+    vs.cardWidth = Math.floor((w - (vs.columns - 1) * gap) / vs.columns);
+    vs.cardHeight = 200;
+  } else {
+    const minW = 280;
+    vs.columns = Math.max(1, Math.floor((w + gap) / (minW + gap)));
+    vs.cardWidth = Math.floor((w - (vs.columns - 1) * gap) / vs.columns);
+    vs.cardHeight = 340;
+  }
+
+  const totalRows = Math.ceil(vs.items.length / vs.columns);
+  vs.totalHeight = totalRows * vs.cardHeight + (totalRows - 1) * gap;
+  vs.wrapper.style.height = `${vs.totalHeight}px`;
+}
+
+function vsOnScroll() {
+  if (vs.rafId) return;
+  vs.rafId = requestAnimationFrame(() => {
+    vs.rafId = null;
+    vsRender();
+  });
+}
+
+function vsOnResize() {
+  vsMeasure();
+  vsRender();
+}
+
+function vsRender() {
+  if (!vs.active || !vs.container) return;
+
+  const scrollTop = vs.container.scrollTop;
+  const viewH = vs.container.clientHeight;
+  const rowH = vs.cardHeight + vs.gap;
+
+  const startRow = Math.max(0, Math.floor(scrollTop / rowH) - 2);
+  const visibleRows = Math.ceil(viewH / rowH) + 4;
+  const totalRows = Math.ceil(vs.items.length / vs.columns);
+  const endRow = Math.min(totalRows, startRow + visibleRows);
+
+  const startIdx = startRow * vs.columns;
+  const endIdx = Math.min(vs.items.length, endRow * vs.columns);
+
+  // Remove cards outside visible range
+  const existingCards = vs.wrapper.querySelectorAll('.media-card');
+  existingCards.forEach(card => {
+    const id = card.getAttribute('data-id');
+    const idx = vs.items.findIndex(i => i.id === id);
+    if (idx < startIdx || idx >= endIdx) card.remove();
+  });
+
+  // Track already-rendered IDs
+  const renderedIds = new Set();
+  vs.wrapper.querySelectorAll('.media-card').forEach(c => renderedIds.add(c.getAttribute('data-id')));
+
+  const typeIconMap = { video: '🎥', image: '🖼️', audio: '🎵', document: '📄' };
+
+  for (let i = startIdx; i < endIdx; i++) {
+    const item = vs.items[i];
+    if (!item || renderedIds.has(item.id)) continue;
+
+    const row = Math.floor(i / vs.columns);
+    const col = i % vs.columns;
+    const left = col * (vs.cardWidth + vs.gap);
+    const top = row * (vs.cardHeight + vs.gap);
+
+    const cardHtml = buildCardHtml(item, vs.selectedItemIds.has(item.id), typeIconMap);
+    vs.wrapper.insertAdjacentHTML('beforeend', cardHtml);
+    const card = vs.wrapper.lastElementChild;
+    card.style.position = 'absolute';
+    card.style.width = `${vs.cardWidth}px`;
+    card.style.left = `${left}px`;
+    card.style.top = `${top}px`;
+    card.style.margin = '0';
+    card.style.transition = 'none';
+    card.style.animation = 'none';
+  }
+
+  // Apply blur
+  vs.container.classList.toggle('thumb-blurred', store.state.thumbBlurred);
 }
 
 function trapFocus(container, e) {
@@ -523,3 +709,5 @@ function getFocusableElements(container) {
   ];
   return [...container.querySelectorAll(selectors)].filter(el => el.offsetParent !== null);
 }
+
+

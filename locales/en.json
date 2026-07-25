@@ -68,7 +68,8 @@
     "downloading": "Downloading...",
     "paused": "Paused",
     "error": "An error occurred while processing the link. Check the URL and try again.",
-    "filter_empty": "No results for current filters."
+    "filter_empty": "No results for current filters.",
+    "clear_filters": "Clear filters"
   },
   "zip": {
     "title": "Batch Download (ZIP)",
@@ -79,7 +80,9 @@
     "speed": "Speed: {speed}",
     "estimated_bytes": "Processed size: {bytes}",
     "start_error": "Failed to start ZIP packaging",
-    "task_error": "Task cancelled or error"
+    "task_error": "Task cancelled or error",
+    "rename_label": "Name your ZIP file",
+    "start": "Start ZIP"
   },
   "modal": {
     "preview_title": "Media Preview",
@@ -96,7 +99,8 @@
   },
   "queue": {
     "title": "Active Downloads",
-    "empty": "No active downloads"
+    "empty": "No active downloads",
+    "clear_done": "Clear completed"
   },
   "toast": {
     "analyzed_success": "Media extracted successfully!",

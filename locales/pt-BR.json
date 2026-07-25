@@ -14,7 +14,8 @@
     "theme": "Alternar Tema",
     "language": "Idioma",
     "language_label": "Seletor de Idioma",
-    "theme_label": "Alternar Tema"
+    "theme_label": "Alternar Tema",
+    "queue": "Fila de Downloads"
   },
   "search": {
     "placeholder": "Cole aqui o link da página (ex: https://gofile.io/d/..., pixeldrain.com...)",
@@ -35,17 +36,20 @@
     "deselect_all": "Desmarcar Todos",
     "download_selected": "Baixar Selecionados (ZIP)",
     "download": "Download",
-    "preview": "Assistir / Preview",
+    "sound": "Som ao concluir",
+    "preview": "Visualizar",
     "cancel": "Cancelar",
     "close": "Fechar",
     "copy_link": "Copiar Link",
-    "nsfw_title": "Alternar desfoque NSFW"
+    "nsfw_title": "Alternar desfoque NSFW",
+    "toggle_select": "Selecionar ou desmarcar todas as mídias filtradas"
   },
   "views": {
     "grid": "Grade",
     "list": "Lista",
     "grid_title": "Modo Grade",
-    "list_title": "Modo Lista"
+    "list_title": "Modo Lista",
+    "compact_title": "Modo Compacto"
   },
   "landing": {
     "headline": "Baixe mídias de qualquer lugar com o <span class=\"gradient-text\">WebScope</span>",
@@ -86,7 +90,13 @@
     "resume": "Retomar",
     "cancel": "Cancelar",
     "complete": "Download concluído!",
-    "error": "Erro no download"
+    "error": "Erro no download",
+    "downloading": "Baixando",
+    "paused": "Pausado"
+  },
+  "queue": {
+    "title": "Downloads Ativos",
+    "empty": "Nenhum download em andamento"
   },
   "toast": {
     "analyzed_success": "Mídias extraídas com sucesso!",
@@ -95,6 +105,7 @@
     "download_in_progress": "Já existe um download em andamento",
     "zip_error": "Erro ao gerar arquivo ZIP.",
     "invalid_url": "URL inválida",
-    "no_media_selected": "Nenhuma mídia selecionada."
+    "no_media_selected": "Nenhuma mídia selecionada.",
+    "copy_failed": "Falha ao copiar link"
   }
 }

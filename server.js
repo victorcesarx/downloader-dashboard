@@ -4,6 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import { fileURLToPath } from 'url';
+import dns from 'dns';
+import net from 'net';
 import archiver from 'archiver';
 import { createHash } from 'crypto';
 
@@ -15,6 +17,57 @@ const TEMP_DIR = path.join(__dirname, 'temp_zips');
 
 // Auth — set DOWNDASH_TOKEN env var to enable
 const AUTH_TOKEN = process.env.DOWNDASH_TOKEN || null;
+
+// Rate limiter — in-memory sliding window
+const RATE_LIMIT_WINDOW = 60_000; // 1 minute
+const RATE_LIMIT_MAX = 20; // max requests per window per IP
+const rateLimitStore = new Map();
+
+function rateLimit(req) {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  let entry = rateLimitStore.get(ip);
+  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW) {
+    entry = { windowStart: now, count: 0 };
+    rateLimitStore.set(ip, entry);
+  }
+  entry.count++;
+  return { allowed: entry.count <= RATE_LIMIT_MAX, remaining: Math.max(0, RATE_LIMIT_MAX - entry.count), reset: entry.windowStart + RATE_LIMIT_WINDOW };
+}
+
+// Periodic cleanup of stale entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitStore) {
+    if (now - entry.windowStart > RATE_LIMIT_WINDOW * 2) rateLimitStore.delete(ip);
+  }
+}, 60_000);
+
+// Safe body collector with max size limit
+function collectBody(req, res, maxSize) {
+  return new Promise((resolve, reject) => {
+    let bodyStr = '';
+    let aborted = false;
+    req.on('data', chunk => {
+      bodyStr += chunk;
+      if (Buffer.byteLength(bodyStr) > maxSize) {
+        aborted = true;
+        req.destroy();
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Request body too large' }));
+        reject(new Error('Body too large'));
+      }
+    });
+    req.on('end', () => {
+      if (!aborted) resolve(bodyStr);
+    });
+    req.on('error', err => reject(err));
+  });
+}
+
+const BODY_LIMIT_AUTH = 10 * 1024; // 10KB
+const BODY_LIMIT_ANALYZE = 100 * 1024; // 100KB
+const BODY_LIMIT_ZIP = 10 * 1024 * 1024; // 10MB
 
 // HTTPS — place cert.pem + key.pem in a "certs" folder next to server.js
 const CERTS_DIR = path.join(__dirname, 'certs');
@@ -469,7 +522,12 @@ async function scrapePixelDrain(url) {
       let mime = '';
 
       try {
-        const infoRes = await fetch(`https://pixeldrain.com/api/file/${fileId}/info`);
+        const infoRes = await fetch(`https://pixeldrain.com/api/file/${fileId}/info`, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://pixeldrain.com/'
+          }
+        });
         if (infoRes.ok) {
           const info = await infoRes.json();
           name = info.name || name;
@@ -484,15 +542,8 @@ async function scrapePixelDrain(url) {
       else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) || mime.startsWith('image/')) type = 'image';
       else if (['mp3', 'wav', 'ogg'].includes(ext) || mime.startsWith('audio/')) type = 'audio';
 
-      let thumbnail = null;
-      if (type === 'video') {
-        try {
-          const pageHtml = await fetchText(url);
-          if (pageHtml) {
-            thumbnail = extractOGImage(pageHtml);
-          }
-        } catch (e) {}
-      }
+      // Thumbnail: use API regardless of detected type (works for video and image)
+      const thumbnail = `https://pixeldrain.com/api/file/${fileId}/thumbnail?width=128&height=128`;
 
       return {
         title: name,
@@ -515,13 +566,19 @@ async function scrapePixelDrain(url) {
         else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) type = 'image';
         else if (['mp3', 'wav', 'ogg'].includes(ext)) type = 'audio';
 
+        let thumbnail = null;
+        if (type === 'video' || type === 'image') {
+          thumbnail = `https://pixeldrain.com/api/file/${f.id}/thumbnail?width=128&height=128`;
+        }
+
         return {
           type,
           name: f.name,
           url: `https://pixeldrain.com/api/file/${f.id}`,
           ext,
           label: type,
-          size: f.size || 0
+          size: f.size || 0,
+          thumbnail
         };
       });
 
@@ -1433,6 +1490,79 @@ async function enrichItemSizes(items) {
   }));
 }
 
+// SSRF validation — resolve hostname to IP and check against private ranges
+const PRIVATE_IPV4 = [
+  { addr: '10.', mask: 8 },
+  { addr: '127.', mask: 8 },
+  { addr: '169.254.', mask: 16 },
+  { addr: '172.16.', mask: 12 },
+  { addr: '192.168.', mask: 16 },
+  { addr: '0.', mask: 8 },
+  { addr: '100.64.', mask: 10 },
+];
+
+function ipv4ToNum(ip) {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return null;
+  return parts.reduce((acc, oct) => { const n = parseInt(oct, 10); return isNaN(n) ? null : (acc === null ? null : acc * 256 + n); }, 0);
+}
+
+function isPrivateIPv4(ip) {
+  const num = ipv4ToNum(ip);
+  if (num === null) return false;
+  if (num === 0) return true;
+  if (num === 2130706432) return true; // 127.0.0.1
+  if (num >= 2851995648 && num <= 2852061183) return true; // 169.254.0.0/16
+  if (num >= 167772160 && num <= 184549375) return true; // 10.0.0.0/8
+  if (num >= 2886729728 && num <= 2887778303) return true; // 172.16.0.0/12
+  if (num >= 3232235520 && num <= 3232301055) return true; // 192.168.0.0/16
+  if (num >= 3221225472 && num <= 3221225727) return true; // 100.64.0.0/10 (CGNAT)
+  return false;
+}
+
+function isPrivateIPv6(ip) {
+  const lower = ip.toLowerCase();
+  if (lower === '::1' || lower === '0:0:0:0:0:0:0:1') return true;
+  if (lower === '::' || lower === '0:0:0:0:0:0:0:0') return true;
+  if (lower.startsWith('::ffff:') || lower.startsWith('0:0:0:0:0:ffff:')) {
+    const ipv4 = lower.includes('::ffff:') ? lower.split('::ffff:')[1] : lower.split('0:0:0:0:0:ffff:')[1];
+    if (ipv4) return isPrivateIPv4(ipv4);
+  }
+  if (lower.startsWith('fd') || lower.startsWith('fc')) return true; // fc00::/7 unique local
+  if (lower.startsWith('fe80')) return true; // fe80::/10 link-local
+  return false;
+}
+
+async function isPrivateHost(hostname) {
+  const h = hostname.toLowerCase();
+
+  // First check if hostname itself is a raw private hostname
+  if (h === 'localhost' || h === 'localhost.localdomain' || h.endsWith('.local')) return true;
+
+  // Try direct IP check
+  if (net.isIP(h)) {
+    if (net.isIPv4(h)) return isPrivateIPv4(h);
+    return isPrivateIPv6(h);
+  }
+
+  // Resolve DNS to IPs
+  try {
+    const addresses = await new Promise((resolve, reject) => {
+      dns.lookup(h, { all: true }, (err, addrs) => {
+        if (err) return reject(err);
+        resolve(addrs.map(a => a.address));
+      });
+    });
+    return addresses.some(addr => {
+      if (net.isIPv4(addr)) return isPrivateIPv4(addr);
+      return isPrivateIPv6(addr);
+    });
+  } catch {
+    // If DNS fails to resolve, block it (could be a rebind attempt)
+    return true;
+  }
+}
+
 // -------------------------------------------------------------
 // HTTP Server & Route Handler
 // -------------------------------------------------------------
@@ -1467,52 +1597,60 @@ const server = http.createServer(async (req, res) => {
 
   // Auth login endpoint (only valid when AUTH_TOKEN is set)
   if (AUTH_TOKEN && method === 'POST' && pathname === '/auth') {
-    let bodyStr = '';
-    req.on('data', chunk => bodyStr += chunk);
-    req.on('end', () => {
-      try {
-        const { token } = JSON.parse(bodyStr);
-        if (token === AUTH_TOKEN) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          return res.end(JSON.stringify({ ok: true }));
-        }
-      } catch (e) {}
-      res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Invalid token' }));
-    });
+    let bodyStr;
+    try {
+      bodyStr = await collectBody(req, res, BODY_LIMIT_AUTH);
+    } catch { return; }
+    try {
+      const { token } = JSON.parse(bodyStr);
+      if (token === AUTH_TOKEN) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ ok: true }));
+      }
+    } catch (e) {}
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid token' }));
     return;
   }
 
   // 1. POST /analyze
   if (req.method === 'POST' && pathname === '/analyze') {
-    let bodyStr = '';
-    req.on('data', chunk => bodyStr += chunk);
-    req.on('end', async () => {
-      try {
-        const body = JSON.parse(bodyStr);
-        if (!body.url) {
-          console.warn(`[Analyze] Missing URL in request body`);
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          return res.end(JSON.stringify({ error: 'URL is required' }));
-        }
-        console.log(`[Analyze] Analyzing: ${body.url}`);
-        const result = await analyzePage(body.url);
-        const count = result?.items?.length || 0;
-        console.log(`[Analyze] Result: ${count} item(s) for ${body.url}`);
-        if (count > 0) {
-          await enrichItemSizes(result.items);
-        }
-        if (count === 0) {
-          console.warn(`[Analyze] No items found for URL: ${body.url}`);
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(result));
-      } catch (err) {
-        console.error(`[Analyze] Error: ${err.message}`);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+    const rl = rateLimit(req);
+    res.setHeader('X-RateLimit-Limit', RATE_LIMIT_MAX);
+    res.setHeader('X-RateLimit-Remaining', rl.remaining);
+    res.setHeader('X-RateLimit-Reset', Math.ceil(rl.reset / 1000));
+    if (!rl.allowed) {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': Math.ceil((rl.reset - Date.now()) / 1000) });
+      return res.end(JSON.stringify({ error: 'Too many requests. Please wait before analyzing another URL.' }));
+    }
+    let bodyStr;
+    try {
+      bodyStr = await collectBody(req, res, BODY_LIMIT_ANALYZE);
+    } catch { return; }
+    try {
+      const body = JSON.parse(bodyStr);
+      if (!body.url) {
+        console.warn(`[Analyze] Missing URL in request body`);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'URL is required' }));
       }
-    });
+      console.log(`[Analyze] Analyzing: ${body.url}`);
+      const result = await analyzePage(body.url);
+      const count = result?.items?.length || 0;
+      console.log(`[Analyze] Result: ${count} item(s) for ${body.url}`);
+      if (count > 0) {
+        await enrichItemSizes(result.items);
+      }
+      if (count === 0) {
+        console.warn(`[Analyze] No items found for URL: ${body.url}`);
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      console.error(`[Analyze] Error: ${err.message}`);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
     return;
   }
 
@@ -1536,12 +1674,16 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Only http/https URLs allowed' }));
     }
-    // Block requests to local/private IP ranges
-    const hostname = parsedUrl.hostname.toLowerCase();
-    const blockedPatterns = ['localhost', '127.0.0.1', '::1', '0.0.0.0', '10.', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.', '192.168.'];
-    if (blockedPatterns.some(p => hostname.startsWith(p) || hostname === p)) {
+    // Block requests to local/private IP ranges (DNS-based check)
+    try {
+      const isPrivate = await isPrivateHost(parsedUrl.hostname);
+      if (isPrivate) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'Access to private IPs is blocked' }));
+      }
+    } catch {
       res.writeHead(403, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ error: 'Access to private IPs is blocked' }));
+      return res.end(JSON.stringify({ error: 'Access blocked' }));
     }
 
     const rangeHint = req.headers.range ? ` range=${req.headers.range}` : '';
@@ -1563,7 +1705,33 @@ const server = http.createServer(async (req, res) => {
         headers['Referer'] = 'https://pixeldrain.com/';
       }
 
-      const proxyRes = await fetch(targetUrl, { headers });
+      // Manual redirect following with SSRF re-validation
+      const MAX_REDIRECTS = 5;
+      let currentUrl = targetUrl;
+      let proxyRes;
+      for (let i = 0; i <= MAX_REDIRECTS; i++) {
+        proxyRes = await fetch(currentUrl, { headers, redirect: 'manual' });
+        const status = proxyRes.status;
+        if (status >= 300 && status < 400) {
+          const location = proxyRes.headers.get('location');
+          if (!location) break;
+          const redirectUrl = new URL(location, currentUrl).href;
+          const redirectParsed = new URL(redirectUrl);
+          if (redirectParsed.protocol !== 'http:' && redirectParsed.protocol !== 'https:') {
+            res.writeHead(502);
+            return res.end('Proxy Error: Invalid redirect protocol');
+          }
+          const isPrivate = await isPrivateHost(redirectParsed.hostname);
+          if (isPrivate) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Redirect to private IP blocked' }));
+          }
+          currentUrl = redirectUrl;
+          console.log(`[Proxy] Following redirect ${i + 1}: ${redirectUrl.substring(0, 100)}`);
+          continue;
+        }
+        break;
+      }
       
       const resHeaders = {};
       if (proxyRes.headers.get('content-type')) resHeaders['Content-Type'] = proxyRes.headers.get('content-type');
@@ -1597,30 +1765,30 @@ const server = http.createServer(async (req, res) => {
 
   // 3. POST /download-zip
   if (req.method === 'POST' && pathname === '/download-zip') {
-    let bodyStr = '';
-    req.on('data', chunk => bodyStr += chunk);
-    req.on('end', () => {
-      try {
-        const body = JSON.parse(bodyStr);
-        const items = body.items || [];
-        if (items.length === 0) {
-          console.warn(`[ZIP] No items provided`);
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          return res.end(JSON.stringify({ error: 'No items provided for ZIP' }));
-        }
-
-        const taskId = `zip_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-        console.log(`[ZIP] Starting task ${taskId} with ${items.length} file(s)`);
-        runZipTask(taskId, items);
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ taskId }));
-      } catch (err) {
-        console.error(`[ZIP] Error creating task: ${err.message}`);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+    let bodyStr;
+    try {
+      bodyStr = await collectBody(req, res, BODY_LIMIT_ZIP);
+    } catch { return; }
+    try {
+      const body = JSON.parse(bodyStr);
+      const items = body.items || [];
+      if (items.length === 0) {
+        console.warn(`[ZIP] No items provided`);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'No items provided for ZIP' }));
       }
-    });
+
+      const taskId = `zip_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      console.log(`[ZIP] Starting task ${taskId} with ${items.length} file(s)`);
+      runZipTask(taskId, items);
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ taskId }));
+    } catch (err) {
+      console.error(`[ZIP] Error creating task: ${err.message}`);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
     return;
   }
 
@@ -1755,7 +1923,9 @@ const server = http.createServer(async (req, res) => {
 // -------------------------------------------------------------
 const handler = server; // reuse the createServer result
 
-if (httpsOptions) {
+if (process.env.VITEST) {
+  // Running in test mode — skip server startup
+} else if (httpsOptions) {
   https.createServer(httpsOptions, (req, res) => handler.emit('request', req, res)).listen(PORT, () => {
     console.log(`🚀 WebScope HTTPS running on https://localhost:${PORT}`);
   });
@@ -1850,3 +2020,36 @@ function getLoginPage() {
 </body>
 </html>`;
 }
+
+export {
+  server,
+  extractOGImage,
+  escapeRegex,
+  generateWT,
+  getCookies,
+  setCookies,
+  requireAuth,
+  fetchText,
+  analyzePage,
+  fetchGoFileWT,
+  createGoFileToken,
+  ensureGoFileSession,
+  fetchGoFileContents,
+  scrapeGoFile,
+  scrapePixelDrain,
+  scrapeCyberDrop,
+  scrapeBunkr,
+  scrapeGeneric,
+  scrapeErome,
+  scrapeTwitter,
+  cookieJar,
+  zipTasks,
+  runZipTask,
+  enrichItemSizes,
+  MIME_TYPES,
+  CACHE_DURATIONS,
+  cleanupOrphanedZips,
+  PORT,
+  TEMP_DIR,
+  AUTH_TOKEN,
+};

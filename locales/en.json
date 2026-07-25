@@ -14,7 +14,8 @@
     "theme": "Toggle Theme",
     "language": "Language",
     "language_label": "Language Selector",
-    "theme_label": "Toggle Theme"
+    "theme_label": "Toggle Theme",
+    "queue": "Download Queue"
   },
   "search": {
     "placeholder": "Paste page link here (e.g., https://gofile.io/d/..., pixeldrain.com...)",
@@ -35,17 +36,20 @@
     "deselect_all": "Deselect All",
     "download_selected": "Download Selected (ZIP)",
     "download": "Download",
-    "preview": "Watch / Preview",
+    "sound": "Completion sound",
+    "preview": "Preview",
     "cancel": "Cancel",
     "close": "Close",
     "copy_link": "Copy Link",
-    "nsfw_title": "Toggle NSFW blur"
+    "nsfw_title": "Toggle NSFW blur",
+    "toggle_select": "Select or deselect all filtered media"
   },
   "views": {
     "grid": "Grid",
     "list": "List",
     "grid_title": "Grid View",
-    "list_title": "List View"
+    "list_title": "List View",
+    "compact_title": "Compact View"
   },
   "landing": {
     "headline": "Download media from anywhere with <span class=\"gradient-text\">WebScope</span>",
@@ -86,7 +90,13 @@
     "resume": "Resume",
     "cancel": "Cancel",
     "complete": "Download complete!",
-    "error": "Download error"
+    "error": "Download error",
+    "downloading": "Downloading",
+    "paused": "Paused"
+  },
+  "queue": {
+    "title": "Active Downloads",
+    "empty": "No active downloads"
   },
   "toast": {
     "analyzed_success": "Media extracted successfully!",
@@ -95,6 +105,7 @@
     "download_in_progress": "A download is already in progress",
     "zip_error": "Error generating ZIP file.",
     "invalid_url": "Invalid URL",
-    "no_media_selected": "No media selected."
+    "no_media_selected": "No media selected.",
+    "copy_failed": "Failed to copy link"
   }
 }

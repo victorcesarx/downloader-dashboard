@@ -58,6 +58,22 @@ export function apiFetch(url, options = {}) {
   return fetch(url, options);
 }
 
+export function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.value = 0.3;
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    osc.stop(ctx.currentTime + 0.25);
+    osc.onended = () => ctx.close();
+  } catch (_) {}
+}
+
 export class Toast {
   static show(message, type = 'info', duration = 4000) {
     let container = document.getElementById('toast-container');

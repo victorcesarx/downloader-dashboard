@@ -5,7 +5,9 @@ import { store } from './state.js';
 import { initI18n, loadLocale, t } from './i18n.js';
 import { analyzeUrl } from './analyzer.js';
 import { renderMediaContainer, updateBatchActionsUI, updateAllCardSelections, toggleBlur } from './renderer.js';
+import { playBeep } from './utils.js';
 import { startZipDownload } from './zip-download.js';
+import { initQueue, toggleQueue } from './download-queue.js';
 
 function navigate(view) {
   const landing = document.getElementById('view-landing');
@@ -37,7 +39,7 @@ function initRouter() {
     navigate(v);
   });
 
-  document.querySelectorAll('a[href^="#"]').forEach(a => {
+  document.querySelectorAll('a[href^="#"]:not(#queue-toggle-btn)').forEach(a => {
     a.addEventListener('click', (e) => {
       e.preventDefault();
       const v = a.getAttribute('href').slice(1);
@@ -52,11 +54,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 1. Initialize i18n (must be before router, which uses t() for button text)
   await initI18n();
+  document.documentElement.classList.add('i18n-ready');
 
   // 2. SPA Router
   initRouter();
 
-  // 3. Attach Event Listeners
+  // 3. Initialize Download Queue
+  initQueue();
+
+  // 4. Attach Event Listeners
   setupEventListeners();
 
   // 4. Initial Render
@@ -154,25 +160,28 @@ function setupEventListeners() {
     });
   }
 
-  // View Mode Toggles (Grid / List)
-  const gridBtn = document.getElementById('view-grid-btn');
-  const listBtn = document.getElementById('view-list-btn');
+  // View Mode Toggles (Grid / List / Compact)
+  const viewModeMap = { grid: 'view-grid-btn', list: 'view-list-btn', compact: 'view-compact-btn' };
 
-  if (gridBtn && listBtn) {
-    gridBtn.addEventListener('click', () => {
-      gridBtn.classList.add('active');
-      listBtn.classList.remove('active');
-      store.state.viewMode = 'grid';
-      renderMediaContainer();
-    });
-
-    listBtn.addEventListener('click', () => {
-      listBtn.classList.add('active');
-      gridBtn.classList.remove('active');
-      store.state.viewMode = 'list';
-      renderMediaContainer();
-    });
+  function activateViewMode(mode) {
+    document.querySelectorAll('.view-toggle .view-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(viewModeMap[mode]);
+    if (btn) btn.classList.add('active');
   }
+
+  // Initialize active button from persisted state
+  activateViewMode(store.state.viewMode);
+
+  document.querySelectorAll('.view-toggle .view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.id.replace('view-', '').replace('-btn', '');
+      if (mode === store.state.viewMode) return;
+      activateViewMode(mode);
+      store.state.viewMode = mode;
+      localStorage.setItem('downdash_view', mode);
+      renderMediaContainer();
+    });
+  });
 
   // NSFW Blur Toggle (square button)
   const nsfwBtn = document.getElementById('nsfw-btn');
@@ -210,6 +219,29 @@ function setupEventListeners() {
       store.state.selectedItemIds = next;
       updateAllCardSelections();
       updateBatchActionsUI();
+    });
+  }
+
+  // Sound Notification Toggle
+  const soundBtn = document.getElementById('sound-btn');
+  if (soundBtn) {
+    soundBtn.classList.toggle('active', store.state.soundEnabled);
+    soundBtn.textContent = store.state.soundEnabled ? '🔊' : '🔇';
+    soundBtn.addEventListener('click', () => {
+      const next = !store.state.soundEnabled;
+      store.state.soundEnabled = next;
+      localStorage.setItem('downdash_sound', next);
+      soundBtn.classList.toggle('active', next);
+      soundBtn.textContent = next ? '🔊' : '🔇';
+    });
+  }
+
+  // Download Queue Toggle
+  const queueToggleBtn = document.getElementById('queue-toggle-btn');
+  if (queueToggleBtn) {
+    queueToggleBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleQueue();
     });
   }
 

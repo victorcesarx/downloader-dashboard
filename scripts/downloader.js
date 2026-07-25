@@ -1,7 +1,21 @@
-import { Toast, formatBytes, formatSpeed, apiFetch } from './utils.js';
+import { Toast, formatBytes, formatSpeed, apiFetch, playBeep } from './utils.js';
 import { t } from './i18n.js';
+import { store } from './state.js';
 
 const activeDownloads = new Map();
+let _onChange = null;
+
+export function setOnChange(cb) {
+  _onChange = cb;
+}
+
+export function getActiveDownloads() {
+  return activeDownloads;
+}
+
+function notifyChange() {
+  if (_onChange) _onChange(activeDownloads);
+}
 
 export function downloadFile(item, cardEl) {
   if (activeDownloads.has(item.id)) {
@@ -22,6 +36,7 @@ export function downloadFile(item, cardEl) {
   };
 
   activeDownloads.set(item.id, ad);
+  notifyChange();
 
   const actions = cardEl.querySelector('.card-actions');
   ad.actionsChildren = Array.from(actions.children);
@@ -38,8 +53,8 @@ export function downloadFile(item, cardEl) {
       <span class="cp-bytes">${formatBytes(0)}</span>
     </div>
     <div style="display:flex; gap:4px; margin-top:4px;">
-      <button class="btn btn-secondary btn-sm cp-pause" style="flex:1;padding:2px 6px;font-size:0.7rem;">⏸ ${t('dl.pause')}</button>
-      <button class="btn btn-secondary btn-sm cp-cancel" style="flex:1;padding:2px 6px;font-size:0.7rem;">✕ ${t('dl.cancel')}</button>
+      <button class="btn btn-secondary btn-sm cp-pause" style="flex:1;padding:2px 6px;font-size:0.7rem;" title="${t('dl.pause')}">⏸ ${t('dl.pause')}</button>
+      <button class="btn btn-secondary btn-sm cp-cancel" style="flex:1;padding:2px 6px;font-size:0.7rem;" title="${t('dl.cancel')}">✕ ${t('dl.cancel')}</button>
     </div>
   `;
   actions.appendChild(progressEl);
@@ -93,6 +108,8 @@ function finishDownload(ad) {
   if (!ad || ad._done) return;
   ad._done = true;
 
+  if (store.state.soundEnabled) playBeep();
+
   const blob = new Blob(ad.chunks);
   const blobUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -144,6 +161,8 @@ function updateProgress(ad) {
     const pct = ad.totalLength > 0 ? ` (${Math.round((ad.receivedLength / ad.totalLength) * 100)}%)` : '';
     bytesEl.textContent = `${formatBytes(ad.receivedLength)}${pct}`;
   }
+
+  notifyChange();
 }
 
 function togglePause(ad) {
@@ -192,7 +211,7 @@ function onError(ad, message) {
         <span>❌</span>
         <span>${t('dl.error')}</span>
       </div>
-      <button class="btn btn-primary btn-sm cp-close" style="margin-top:6px;width:100%;padding:4px 8px;font-size:0.75rem;">${t('actions.close')}</button>
+      <button class="btn btn-primary btn-sm cp-close" style="margin-top:6px;width:100%;padding:4px 8px;font-size:0.75rem;" title="${t('actions.close')}">${t('actions.close')}</button>
     `;
     progressEl.querySelector('.cp-close')?.addEventListener('click', () => cleanup(ad));
   }
@@ -200,10 +219,14 @@ function onError(ad, message) {
 }
 
 function cleanup(ad) {
-  if (!ad) return;
+  if (!ad || ad._done) return;
   ad._done = true;
-  if (ad.speedInterval) clearInterval(ad.speedInterval);
+  if (ad.speedInterval) {
+    clearInterval(ad.speedInterval);
+    ad.speedInterval = null;
+  }
   activeDownloads.delete(ad.item.id);
+  notifyChange();
   const progressEl = ad.cardEl?.querySelector('.card-progress-inline');
   if (progressEl) progressEl.remove();
   const actions = ad.cardEl?.querySelector('.card-actions');

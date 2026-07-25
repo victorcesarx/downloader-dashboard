@@ -1,5 +1,5 @@
 import { store } from './state.js';
-import { Toast, formatBytes, formatSpeed, formatDuration, apiFetch } from './utils.js';
+import { Toast, formatBytes, formatSpeed, formatDuration, apiFetch, playBeep } from './utils.js';
 import { t } from './i18n.js';
 
 const activeTasks = new Map();
@@ -35,6 +35,8 @@ export async function startZipDownload() {
     activeTasks.set(taskId, true);
 
     const totalBytes = selectedItems.reduce((sum, i) => sum + (i.size || 0), 0);
+    store.state.activeZipTask = { taskId, total: selectedItems.length, totalBytes, progress: 0 };
+    updateNavbarZipProgress(0, selectedItems.length);
     renderZipPanel(taskId, selectedItems.length, totalBytes);
     startPollingStatus(taskId);
   } catch (err) {
@@ -79,6 +81,15 @@ function renderZipPanel(taskId, totalFiles, totalBytes) {
   });
 }
 
+function updateNavbarZipProgress(current, total) {
+  const bar = document.getElementById('zip-navbar-progress');
+  const fill = bar?.querySelector('.zip-navbar-progress-bar');
+  if (!bar || !fill) return;
+  const pct = Math.round((current / (total || 1)) * 100);
+  fill.style.width = `${pct}%`;
+  bar.style.display = pct < 100 ? '' : 'none';
+}
+
 function startPollingStatus(taskId) {
   const interval = setInterval(async () => {
     try {
@@ -87,15 +98,19 @@ function startPollingStatus(taskId) {
 
       const data = await res.json();
       updateZipPanelUI(taskId, data);
+      updateNavbarZipProgress(data.processed || 0, data.total || 1);
 
       if (data.status === 'completed') {
         clearInterval(interval);
         pollingIntervals.delete(taskId);
+        store.state.activeZipTask = null;
         onZipCompleted(taskId);
       } else if (data.status === 'error' || data.status === 'cancelled') {
         clearInterval(interval);
         pollingIntervals.delete(taskId);
         activeTasks.delete(taskId);
+        store.state.activeZipTask = null;
+        updateNavbarZipProgress(0, 0);
         Toast.show(data.error || t('zip.task_error'), 'error');
         removeZipPanel(taskId);
       }
@@ -143,6 +158,8 @@ function updateZipPanelUI(taskId, data) {
 
 function onZipCompleted(taskId) {
   activeTasks.delete(taskId);
+
+  if (store.state.soundEnabled) playBeep();
   const panel = document.getElementById(`zip-panel-${taskId}`);
   if (!panel) return;
 
@@ -170,6 +187,8 @@ function onZipCompleted(taskId) {
 
 async function cancelZipTask(taskId) {
   activeTasks.delete(taskId);
+  store.state.activeZipTask = null;
+  updateNavbarZipProgress(0, 0);
   const interval = pollingIntervals.get(taskId);
   if (interval) {
     clearInterval(interval);

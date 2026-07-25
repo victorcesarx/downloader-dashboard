@@ -6,13 +6,6 @@ import { store } from './state.js';
 let translations = {};
 
 export async function loadLocale(lang) {
-  if (window.__LOCALES__ && window.__LOCALES__[lang]) {
-    translations = window.__LOCALES__[lang];
-    store.state.lang = lang;
-    localStorage.setItem('downdash_lang', lang);
-    translateDOM();
-    return true;
-  }
   try {
     const res = await fetch(`/locales/${lang}.json`);
     if (!res.ok) throw new Error(`Failed to load locale ${lang}`);

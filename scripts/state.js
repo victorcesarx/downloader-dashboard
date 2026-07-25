@@ -8,12 +8,13 @@ const initialState = {
   selectedItemIds: new Set(),
   activeFilter: 'all',
   searchQuery: '',
-  viewMode: 'grid', // 'grid' | 'list'
+  viewMode: localStorage.getItem('downdash_view') || 'grid',
   thumbBlurred: localStorage.getItem('downdash_blur') === 'true',
   theme: localStorage.getItem('downdash_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
   lang: localStorage.getItem('downdash_lang') || (navigator.language.startsWith('pt') ? 'pt-BR' : 'en'),
   isAnalyzing: false,
-  activeZipTask: null
+  activeZipTask: null,
+  soundEnabled: localStorage.getItem('downdash_sound') === 'true'
 };
 
 class Store {

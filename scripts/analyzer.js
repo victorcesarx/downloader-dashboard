@@ -32,6 +32,12 @@ function setCached(url, data) {
   } catch (e) {}
 }
 
+export function clearCache() {
+  try {
+    sessionStorage.removeItem(CACHE_KEY);
+  } catch (e) {}
+}
+
 function buildItems(data) {
   return (data.items || []).map((item, idx) => {
     const thumb = item.thumbnail;

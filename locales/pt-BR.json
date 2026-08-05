@@ -2,15 +2,9 @@
   "app": {
     "title": "WebScope - Extrator e Downloader de Mídias",
     "subtitle": "Extraia qualquer tipo de mídia de qualquer site instantaneamente",
-    "tagline": "Cole qualquer URL e baixe mídias de forma rápida, segura e em alta qualidade.",
-    "start_now": "Começar Agora",
-    "features_link": "Recursos",
-    "supported_sites": "Sites Suportados",
     "description": "WebScope permite extrair e baixar imagens, vídeos e arquivos de qualquer site de hospedagem de forma fácil e rápida."
   },
   "nav": {
-    "dashboard": "Dashboard",
-    "landing": "Início",
     "theme": "Alternar Tema",
     "language": "Idioma",
     "language_label": "Seletor de Idioma",
@@ -42,7 +36,8 @@
     "close": "Fechar",
     "copy_link": "Copiar Link",
     "nsfw_title": "Alternar desfoque NSFW",
-    "toggle_select": "Selecionar ou desmarcar todas as mídias filtradas"
+    "toggle_select": "Selecionar ou desmarcar todas as mídias filtradas",
+    "clear_cache": "Limpar cache de pesquisa"
   },
   "views": {
     "grid": "Grade",
@@ -50,16 +45,6 @@
     "grid_title": "Modo Grade",
     "list_title": "Modo Lista",
     "compact_title": "Modo Compacto"
-  },
-  "landing": {
-    "headline": "Baixe mídias de qualquer lugar com o <span class=\"gradient-text\">WebScope</span>",
-    "feature1_title": "Extração Ultra Rápida",
-    "feature1_desc": "Scraper inteligente capaz de identificar múltiplos formatos de mídia em segundos.",
-    "feature2_title": "Download em Lote ZIP",
-    "feature2_desc": "Selecione dezenas de mídias e receba um único arquivo ZIP compactado com progresso em tempo real.",
-    "feature3_title": "Proxy Integrado",
-    "feature3_desc": "Bypass inteligente de CORS e suporte a Range Headers para reproduzir vídeos diretamente no navegador.",
-    "footer": "WebScope - Downloader Dashboard. Desenvolvido com Node.js puro & Vanilla JS."
   },
   "status": {
     "empty": "Nenhuma mídia encontrada. Cole uma URL acima para começar a análise.",
@@ -110,6 +95,7 @@
     "zip_error": "Erro ao gerar arquivo ZIP.",
     "invalid_url": "URL inválida",
     "no_media_selected": "Nenhuma mídia selecionada.",
-    "copy_failed": "Falha ao copiar link"
+    "copy_failed": "Falha ao copiar link",
+    "cache_cleared": "Cache de pesquisa limpo! Próxima análise será completa."
   }
 }

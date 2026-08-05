@@ -23,7 +23,7 @@ import { PORT, TEMP_DIR, AUTH_TOKEN, BODY_LIMIT_AUTH, BODY_LIMIT_ANALYZE, BODY_L
 import { rateLimit } from './server/middleware/rate-limit.js';
 import { collectBody } from './server/middleware/body-collector.js';
 import { requireAuth, sendUnauthorized } from './server/middleware/auth.js';
-import { zipTasks, runZipTask, cleanupOrphanedZips } from './server/zip.js';
+import { zipTasks, runZipTask, cleanupZipTask, removeZipFile, cleanupOrphanedZips } from './server/zip.js';
 import { handleProxy } from './server/proxy.js';
 import { serveStatic } from './server/static.js';
 
@@ -179,22 +179,42 @@ const server = http.createServer(async (req, res) => {
     let filename = reqUrl.searchParams.get('filename') || 'webscope_media_pack.zip';
     if (!filename.endsWith('.zip')) filename += '.zip';
     console.log(`[ZIP] Serving result: ${taskId} (${(stat.size / 1024 / 1024).toFixed(1)} MB) as ${filename}`);
+
+    let cleaned = false;
+    let readStream = null;
+    // Limpeza idempotente do download final: destrói o read stream, remove o
+    // arquivo ZIP e a entrada da tarefa. Roda no fim normal ('end'), na
+    // desconexão do cliente ('close') e em erros, sem nunca responder após o
+    // início do envio.
+    const cleanupResult = () => {
+      if (cleaned) return;
+      cleaned = true;
+      if (readStream) {
+        if (readStream.closed) {
+          removeZipFile(task.zipFilePath);
+        } else {
+          readStream.destroy();
+          readStream.once('close', () => removeZipFile(task.zipFilePath));
+        }
+      } else {
+        removeZipFile(task.zipFilePath);
+      }
+      zipTasks.delete(taskId);
+    };
+
+    res.on('close', cleanupResult);
+    res.on('error', cleanupResult);
+
     res.writeHead(200, {
       'Content-Type': 'application/zip',
       'Content-Length': stat.size,
       'Content-Disposition': `attachment; filename="${filename}"`
     });
 
-    const readStream = fs.createReadStream(task.zipFilePath);
+    readStream = fs.createReadStream(task.zipFilePath);
+    readStream.on('error', cleanupResult);
+    readStream.on('end', cleanupResult);
     readStream.pipe(res);
-
-    readStream.on('end', () => {
-      console.log(`[ZIP] Download complete, cleaning up task: ${taskId}`);
-      try {
-        fs.unlinkSync(task.zipFilePath);
-        zipTasks.delete(taskId);
-      } catch (e) {}
-    });
     return;
   }
 
@@ -203,13 +223,8 @@ const server = http.createServer(async (req, res) => {
     const task = zipTasks.get(taskId);
     if (task) {
       console.log(`[ZIP] Cancelling task: ${taskId}`);
-      task.status = 'cancelled';
-      if (task.abortController) {
-        task.abortController.abort();
-      }
-      if (fs.existsSync(task.zipFilePath)) {
-        try { fs.unlinkSync(task.zipFilePath); } catch (e) {}
-      }
+      await cleanupZipTask(task, { status: 'cancelled', abort: true });
+      await removeZipFile(task.zipFilePath);
       zipTasks.delete(taskId);
     } else {
       console.warn(`[ZIP] Cancel request for unknown task: ${taskId}`);

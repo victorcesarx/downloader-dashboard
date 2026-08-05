@@ -3,49 +3,15 @@
  */
 import { store } from './state.js';
 import { initI18n, loadLocale, t } from './i18n.js';
-import { analyzeUrl } from './analyzer.js';
+import { analyzeUrl, clearCache } from './analyzer.js';
 import { renderMediaContainer, updateBatchActionsUI, updateAllCardSelections, toggleBlur } from './renderer.js';
-import { playBeep } from './utils.js';
+import { Toast, playBeep } from './utils.js';
 import { startZipDownload } from './zip-download.js';
 import { initQueue, toggleQueue } from './download-queue.js';
 
-function navigate(view) {
-  const landing = document.getElementById('view-landing');
-  const dashboard = document.getElementById('view-dashboard');
-  if (!landing || !dashboard) return;
-
-  const isDashboard = view === 'dashboard';
-  landing.style.display = isDashboard ? 'none' : '';
-  dashboard.style.display = isDashboard ? '' : 'none';
-
-  document.querySelectorAll('#nav-landing, #nav-dashboard').forEach(el => {
-    el.style.display = el.id === `nav-${view}` ? 'none' : '';
-  });
-
-  if (isDashboard) {
-    renderMediaContainer();
-    updateBatchActionsUI();
-  }
-
-  store.state.currentView = view;
-}
-
 function initRouter() {
-  const hash = location.hash.slice(1) || (location.pathname.includes('dashboard') ? 'dashboard' : 'home');
-  navigate(hash);
-
-  window.addEventListener('hashchange', () => {
-    const v = location.hash.slice(1) || 'home';
-    navigate(v);
-  });
-
-  document.querySelectorAll('a[href^="#"]:not(#queue-toggle-btn)').forEach(a => {
-    a.addEventListener('click', (e) => {
-      e.preventDefault();
-      const v = a.getAttribute('href').slice(1);
-      location.hash = v;
-    });
-  });
+  renderMediaContainer();
+  updateBatchActionsUI();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -137,6 +103,15 @@ function setupEventListeners() {
           urlInput.value = text;
           analyzeForm.dispatchEvent(new Event('submit'));
         }
+      });
+    }
+
+    // Clear search cache
+    const clearCacheBtn = document.getElementById('clear-cache-btn');
+    if (clearCacheBtn) {
+      clearCacheBtn.addEventListener('click', () => {
+        clearCache();
+        Toast.show(t('toast.cache_cleared'), 'success');
       });
     }
   }

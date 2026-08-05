@@ -274,6 +274,16 @@ a:hover {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.clear-cache-btn {
+  flex-shrink: 0;
+}
+
+.clear-cache-btn:hover {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 /* Navbar inner container */
 .navbar .container {
   display: flex;
@@ -299,72 +309,6 @@ a:hover {
 
 .found-count {
   font-weight: 600;
-  color: var(--text-secondary);
-}
-
-/* Landing Page */
-#view-landing {
-  padding-top: 80px;
-  padding-bottom: 80px;
-}
-
-.landing-content {
-  text-align: center;
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.landing-headline {
-  font-size: 3.5rem;
-  margin-bottom: 24px;
-  line-height: 1.1;
-}
-
-.landing-tagline {
-  font-size: 1.25rem;
-  color: var(--text-secondary);
-  margin-bottom: 40px;
-  line-height: 1.6;
-}
-
-.landing-cta {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  margin-bottom: 60px;
-}
-
-.landing-cta .btn-primary {
-  padding: 14px 32px;
-  font-size: 1.1rem;
-}
-
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
-  margin-top: 40px;
-}
-
-.feature-card {
-  background: var(--bg-card);
-  border: 1px solid var(--glass-border);
-  padding: 32px;
-  border-radius: var(--radius-lg);
-  backdrop-filter: blur(16px);
-}
-
-.feature-card-icon {
-  font-size: 2.5rem;
-  margin-bottom: 16px;
-}
-
-.feature-card h3 {
-  margin-bottom: 12px;
-  font-size: 1.3rem;
-}
-
-.feature-card p {
   color: var(--text-secondary);
 }
 

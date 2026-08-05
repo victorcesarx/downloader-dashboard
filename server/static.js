@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename);
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
 
 export function serveStatic(req, res, pathname) {
-  const requestedPath = pathname === '/' || pathname === '/dashboard.html' ? 'index.html' : pathname.slice(1);
+  const requestedPath = pathname === '/' ? 'index.html' : pathname.slice(1);
 
   if (AUTH_TOKEN && (requestedPath.endsWith('.html') || pathname === '/')) {
     if (!requireAuth(req, res)) {

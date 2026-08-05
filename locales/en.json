@@ -2,15 +2,9 @@
   "app": {
     "title": "WebScope - Media Extractor & Downloader",
     "subtitle": "Extract any type of media from any site instantly",
-    "tagline": "Paste any URL and download media quickly, safely, and in high quality.",
-    "start_now": "Start Now",
-    "features_link": "Features",
-    "supported_sites": "Supported Sites",
     "description": "Extract videos, audio, images and documents from any site instantly for individual or batch (ZIP) download."
   },
   "nav": {
-    "dashboard": "Dashboard",
-    "landing": "Home",
     "theme": "Toggle Theme",
     "language": "Language",
     "language_label": "Language Selector",
@@ -42,7 +36,8 @@
     "close": "Close",
     "copy_link": "Copy Link",
     "nsfw_title": "Toggle NSFW blur",
-    "toggle_select": "Select or deselect all filtered media"
+    "toggle_select": "Select or deselect all filtered media",
+    "clear_cache": "Clear search cache"
   },
   "views": {
     "grid": "Grid",
@@ -50,16 +45,6 @@
     "grid_title": "Grid View",
     "list_title": "List View",
     "compact_title": "Compact View"
-  },
-  "landing": {
-    "headline": "Download media from anywhere with <span class=\"gradient-text\">WebScope</span>",
-    "feature1_title": "Ultra-Fast Extraction",
-    "feature1_desc": "Smart scraper capable of identifying multiple media formats in seconds.",
-    "feature2_title": "Batch ZIP Download",
-    "feature2_desc": "Select dozens of media files and receive a single compressed ZIP file with real-time progress.",
-    "feature3_title": "Built-in Proxy",
-    "feature3_desc": "Smart CORS bypass with Range Header support to play videos directly in the browser.",
-    "footer": "WebScope - Downloader Dashboard. Built with pure Node.js & Vanilla JS."
   },
   "status": {
     "empty": "No media found. Paste a URL above to start analyzing.",
@@ -110,6 +95,7 @@
     "zip_error": "Error generating ZIP file.",
     "invalid_url": "Invalid URL",
     "no_media_selected": "No media selected.",
-    "copy_failed": "Failed to copy link"
+    "copy_failed": "Failed to copy link",
+    "cache_cleared": "Search cache cleared! Next analysis will be full."
   }
 }

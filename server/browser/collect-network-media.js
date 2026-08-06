@@ -5,7 +5,7 @@
  * - Navega até `pageUrl` e observa requests e responses;
  * - coleta URLs com extensões de mídia conhecidas;
  * - coleta também respostas cujo Content-Type seja vídeo, áudio, HLS ou DASH;
- * - remove duplicatas;
+ * - remove duplicatas pela URL, preservando o MIME type das responses;
  * - aplica limites (navegação, total de URLs, tempo total);
  * - bloqueia downloads e popups;
  * - sempre fecha página e navegador (finally).
@@ -16,7 +16,9 @@
  * @param {number} [options.postNavigationDelay=3000] - janela de coleta após navegar, em ms.
  * @param {number} [options.maxUrls=200] - máximo de URLs coletadas.
  * @param {number} [options.maxTotalTime=45000] - tempo total máximo, em ms.
- * @returns {Promise<{urls: string[], warnings: string[]}>}
+ * @returns {Promise<{candidates: Array<{url: string, mimeType: string|null, source: string}>, urls: string[], warnings: string[]>}
+ *   - source: 'network-request' | 'network-response'.
+ *   - mimeType: normalizado da response (sem parâmetros); null para requests.
  */
 import { chromium } from 'playwright';
 
@@ -49,20 +51,33 @@ export async function collectNetworkMedia(pageUrl, options = {}) {
     maxTotalTime = 45000,
   } = options;
 
-  const urls = new Set();
+  const candidates = new Map();
   const warnings = [];
   let browser = null;
   let page = null;
   let totalTimer = null;
 
-  const tryAdd = (url) => {
+  const markMaxReached = () => {
+    if (!warnings.includes('max_urls_reached')) warnings.push('max_urls_reached');
+  };
+
+  const addRequest = (url) => {
+    if (!url || candidates.has(url)) return;
+    if (candidates.size >= maxUrls) return markMaxReached();
+    candidates.set(url, { url, mimeType: null, source: 'network-request' });
+    if (candidates.size === maxUrls) markMaxReached();
+  };
+
+  const addResponse = (url, mimeType) => {
     if (!url) return;
-    if (urls.size >= maxUrls) {
-      if (!warnings.includes('max_urls_reached')) warnings.push('max_urls_reached');
+    const entry = { url, mimeType: mimeType || null, source: 'network-response' };
+    if (candidates.has(url)) {
+      candidates.set(url, entry);
       return;
     }
-    urls.add(url);
-    if (urls.size === maxUrls) warnings.push('max_urls_reached');
+    if (candidates.size >= maxUrls) return markMaxReached();
+    candidates.set(url, entry);
+    if (candidates.size === maxUrls) markMaxReached();
   };
 
   try {
@@ -77,12 +92,13 @@ export async function collectNetworkMedia(pageUrl, options = {}) {
     // Observa requests (URLs com extensão de mídia) e responses (extensão ou
     // Content-Type de vídeo/áudio/HLS/DASH).
     page.on('request', (request) => {
-      if (hasMediaExtension(request.url())) tryAdd(request.url());
+      if (hasMediaExtension(request.url())) addRequest(request.url());
     });
     page.on('response', (response) => {
       const url = response.url();
       const contentType = response.headers()['content-type'] || '';
-      if (hasMediaExtension(url) || isMediaContentType(contentType)) tryAdd(url);
+      const baseMime = String(contentType).split(';')[0].trim();
+      if (hasMediaExtension(url) || isMediaContentType(baseMime)) addResponse(url, baseMime);
     });
 
     // Limite de tempo total: fecha a página, parando a coleta.
@@ -111,5 +127,6 @@ export async function collectNetworkMedia(pageUrl, options = {}) {
     if (browser) await browser.close().catch(() => {});
   }
 
-  return { urls: [...urls], warnings };
+  const collected = [...candidates.values()];
+  return { candidates: collected, urls: collected.map(c => c.url), warnings };
 }

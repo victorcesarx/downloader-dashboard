@@ -102,18 +102,23 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: "Invalid mode. Use 'static', 'rendered' or 'auto'." }));
       }
 
-      // Converte URLs do navegador pelo mesmo pipeline (resolve → classifica →
-      // MediaItem → saída legada), removendo duplicatas pela URL final.
-      const buildRenderedItems = (rawUrls) => {
+      // Converte candidatos do navegador pelo mesmo pipeline (resolve → classifica
+      // com MIME → MediaItem → saída legada), removendo duplicatas pela URL final.
+      // Aceita o formato novo { candidates } e o antigo { urls } (temporário).
+      const buildRenderedItems = (collected) => {
+        const candidates = Array.isArray(collected.candidates)
+          ? collected.candidates
+          : (collected.urls || []).map(url => ({ url, mimeType: null, source: 'network-response' }));
         const seen = new Set();
         const items = [];
-        for (const rawUrl of rawUrls) {
-          const resolved = resolveMediaUrl(rawUrl, body.url);
+        for (const candidate of candidates) {
+          if (!candidate || typeof candidate.url !== 'string') continue;
+          const resolved = resolveMediaUrl(candidate.url, body.url);
           if (!resolved || seen.has(resolved)) continue;
           seen.add(resolved);
-          const classification = classifyMedia({ url: resolved });
+          const classification = classifyMedia({ url: resolved, mimeType: candidate.mimeType });
           if (!classification) continue;
-          items.push(mediaItemToLegacy(candidateToMediaItem({ url: resolved, ...classification }, null)));
+          items.push(mediaItemToLegacy(candidateToMediaItem({ url: resolved, ...classification, mimeType: candidate.mimeType }, null)));
         }
         return items;
       };
@@ -127,7 +132,7 @@ const server = http.createServer(async (req, res) => {
         const collected = await collectNetworkMedia(body.url);
         usedBrowser = true;
         browserWarnings = Array.isArray(collected.warnings) ? collected.warnings : [];
-        result = { title: body.url, url: body.url, items: buildRenderedItems(collected.urls) };
+        result = { title: body.url, url: body.url, items: buildRenderedItems(collected) };
       } else {
         result = await analyzePage(body.url);
         // auto: só cai no navegador quando a análise estática retorna zero itens.
@@ -136,7 +141,7 @@ const server = http.createServer(async (req, res) => {
           const collected = await collectNetworkMedia(body.url);
           usedBrowser = true;
           browserWarnings = Array.isArray(collected.warnings) ? collected.warnings : [];
-          result = { title: body.url, url: body.url, items: buildRenderedItems(collected.urls) };
+          result = { title: body.url, url: body.url, items: buildRenderedItems(collected) };
         }
       }
 

@@ -19,6 +19,7 @@ export function candidateToMediaItem(candidate, pageOGImage) {
     url: candidate.url,
     thumbnail: candidate.type !== 'image' ? pageOGImage : null,
     extension: candidate.extension,
+    mimeType: candidate.mimeType,
     source: 'generic',
   });
 }

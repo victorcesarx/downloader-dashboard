@@ -2,7 +2,7 @@
  * Media Analyzer API Client
  */
 import { store } from './state.js';
-import { Toast, apiFetch } from './utils.js';
+import { Toast, apiFetch, getUrlExtension } from './utils.js';
 import { t } from './i18n.js';
 
 const CACHE_KEY = 'analyze_cache';
@@ -49,10 +49,16 @@ function buildItems(data) {
     const proxyThumb = thumb && (thumb.includes('erome.com') || thumb.includes('cyberdrop') || thumb.includes('bunkr') || thumb.includes('pixeldrain.com'))
       ? baseProxy(thumb)
       : thumb;
+    // Extensão: usa a do scraper; se faltar, tenta extrair da URL; último
+    // recurso é "bin". Sempre aplicada ao nome quando ele não termina em
+    // extensão, para que o download não chegue "sem formato".
+    const ext = (item.ext || getUrlExtension(item.url) || 'bin').replace(/^\./, '').toLowerCase();
+    const rawName = (item.name || t('common.media_fallback', { n: idx + 1 })).trim();
+    const name = /\.[a-z0-9]{2,8}$/i.test(rawName) ? rawName : `${rawName}.${ext}`;
     return {
       id: `${Date.now()}_${idx}`,
       type: item.type || 'document',
-      name: item.name || t('common.media_fallback', { n: idx + 1 }),
+      name,
       url: item.url,
       proxyUrl: baseProxy(item.url),
       qualities: (item.qualities || []).map(q => ({
@@ -61,7 +67,7 @@ function buildItems(data) {
         proxyUrl: baseProxy(q.url)
       })),
       selectedQualityIndex: 0,
-      ext: item.ext || 'bin',
+      ext,
       size: item.size || 0,
       label: item.label || item.type,
       thumbnail: proxyThumb

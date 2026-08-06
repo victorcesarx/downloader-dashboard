@@ -797,6 +797,41 @@ a:hover {
   letter-spacing: 0.05em;
 }
 
+.media-badge {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.media-badge--progressive {
+  color: #8ff0a4;
+}
+
+.media-badge--hls {
+  color: #ffcf87;
+}
+
+.media-badge--dash {
+  color: #8fd0ff;
+}
+
+.list-view .media-badge,
+.compact-view .media-badge {
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 6px;
+  font-size: 0.6rem;
+  border-radius: 4px;
+}
+
 .card-body {
   padding: 16px;
   display: flex;

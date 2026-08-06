@@ -10,6 +10,15 @@ let lazyObserver = null;
 let currentFiltered = [];
 let _animatingOut = false;
 
+// Selo de entrega: mapeia `delivery` do item para a chave i18n e classe CSS.
+const DELIVERY_BADGES = { progressive: 'progressive', hls: 'hls', dash: 'dash' };
+
+function deliveryBadgeHtml(item) {
+  const key = DELIVERY_BADGES[item.delivery];
+  if (!key) return '';
+  return `<span class="media-badge media-badge--${key}">${t(`badge.${key}`)}</span>`;
+}
+
 // Virtual scroll state
 let vs = {
   active: false,
@@ -62,6 +71,7 @@ function buildCardHtml(item, isSelected, typeIconMap) {
       <div class="card-media-preview">
         ${previewContent}
         <span class="card-badge-type">${sanitizeHtml(item.label || item.type)}</span>
+        ${deliveryBadgeHtml(item)}
       </div>
       <div class="card-body">
         <div class="card-title" title="${sanitizeHtml(item.name)}">${sanitizeHtml(item.name)}</div>

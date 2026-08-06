@@ -49,6 +49,53 @@ export function estimateFileSize(width, height) {
   return 1 * 1024 * 1024;
 }
 
+// Extensão derivada do Content-Type (conforme reconhecido pelos scrapers).
+const MIME_EXTENSIONS = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/avif': 'avif',
+  'image/svg+xml': 'svg',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+  'video/x-matroska': 'mkv',
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/ogg': 'ogg',
+  'application/pdf': 'pdf',
+  'application/zip': 'zip',
+};
+
+// Extrai a extensão de uma URL (ex.: https://x/a/b.jpeg?t=1 -> "jpeg").
+export function getUrlExtension(url) {
+  if (!url || typeof url !== 'string') return null;
+  try {
+    const path = new URL(url).pathname;
+    const m = path.match(/\.([a-z0-9]{2,5})$/i);
+    return m ? m[1].toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+// Traduz um MIME type em extensão de arquivo (sem ponto).
+export function extensionFromMime(mime) {
+  if (!mime || typeof mime !== 'string') return null;
+  const base = mime.split(';')[0].trim().toLowerCase();
+  return MIME_EXTENSIONS[base] || null;
+}
+
+// Se o nome não terminar em extensão, acrescenta uma (sem modificar impossível).
+export function ensureFileExtension(name, ext) {
+  const base = (name || 'download').trim();
+  if (/\.[a-z0-9]{2,8}$/i.test(base)) return base;
+  const cleanExt = String(ext || '').replace(/^\./, '');
+  return cleanExt ? `${base}.${cleanExt}` : base;
+}
+
 // Fetch wrapper that includes auth token if available
 export function apiFetch(url, options = {}) {
   const token = localStorage.getItem('downdash_token');

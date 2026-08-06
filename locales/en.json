@@ -9,6 +9,11 @@
     "na": "N/A",
     "media_fallback": "Media {n}"
   },
+  "badge": {
+    "progressive": "Direct file",
+    "hls": "HLS",
+    "dash": "DASH"
+  },
   "nav": {
     "theme": "Toggle Theme",
     "language": "Language",

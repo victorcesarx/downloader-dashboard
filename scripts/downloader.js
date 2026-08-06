@@ -1,4 +1,4 @@
-import { Toast, formatBytes, formatSpeed, apiFetch, playBeep } from './utils.js';
+import { Toast, formatBytes, formatSpeed, apiFetch, playBeep, ensureFileExtension, extensionFromMime } from './utils.js';
 import { t } from './i18n.js';
 import { store } from './state.js';
 
@@ -78,6 +78,7 @@ async function executeDownload(ad) {
     const res = await apiFetch(ad.item.proxyUrl, { signal: ad.controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
+    ad.contentType = res.headers.get('content-type') || null;
     const contentLength = res.headers.get('content-length');
     ad.totalLength = contentLength ? parseInt(contentLength) : 0;
 
@@ -118,7 +119,10 @@ function finishDownload(ad) {
   const blobUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = blobUrl;
-  a.download = ad.item.name;
+  a.download = ensureFileExtension(
+    ad.item.name,
+    ad.item.ext || extensionFromMime(ad.contentType) || 'bin'
+  );
   document.body.appendChild(a);
   a.click();
   a.remove();

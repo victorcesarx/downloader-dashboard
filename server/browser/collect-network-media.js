@@ -16,7 +16,7 @@
  * @param {number} [options.postNavigationDelay=3000] - janela de coleta após navegar, em ms.
  * @param {number} [options.maxUrls=200] - máximo de URLs coletadas.
  * @param {number} [options.maxTotalTime=45000] - tempo total máximo, em ms.
- * @returns {Promise<{candidates: Array<{url: string, mimeType: string|null, source: string}>, urls: string[], warnings: string[]>}
+ * @returns {Promise<{candidates: Array<{url: string, mimeType: string|null, source: string}>, warnings: string[]>}
  *   - source: 'network-request' | 'network-response'.
  *   - mimeType: normalizado da response (sem parâmetros); null para requests.
  */
@@ -128,5 +128,5 @@ export async function collectNetworkMedia(pageUrl, options = {}) {
   }
 
   const collected = [...candidates.values()];
-  return { candidates: collected, urls: collected.map(c => c.url), warnings };
+  return { candidates: collected, warnings };
 }

@@ -104,11 +104,8 @@ const server = http.createServer(async (req, res) => {
 
       // Converte candidatos do navegador pelo mesmo pipeline (resolve → classifica
       // com MIME → MediaItem → saída legada), removendo duplicatas pela URL final.
-      // Aceita o formato novo { candidates } e o antigo { urls } (temporário).
       const buildRenderedItems = (collected) => {
-        const candidates = Array.isArray(collected.candidates)
-          ? collected.candidates
-          : (collected.urls || []).map(url => ({ url, mimeType: null, source: 'network-response' }));
+        const candidates = Array.isArray(collected.candidates) ? collected.candidates : [];
         const seen = new Set();
         const items = [];
         for (const candidate of candidates) {

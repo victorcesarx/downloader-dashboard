@@ -4,10 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { analyzePage } from './server/scrapers/index.js';
-import { scrapeGeneric, candidateToMediaItem, mediaItemToLegacy } from './server/scrapers/generic.js';
-import { collectNetworkMedia } from './server/browser/collect-network-media.js';
-import { resolveMediaUrl } from './server/media/resolve-media-url.js';
-import { classifyMedia } from './server/media/classify-media.js';
+import { scrapeGeneric } from './server/scrapers/generic.js';
 import {
   MIME_TYPES, CACHE_DURATIONS, fetchWithCookies, enrichItemSizes,
   extractOGImage, escapeRegex, cookieJar, getCookies, setCookies, fetchText
@@ -95,52 +92,9 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'URL is required' }));
       }
-      const mode = body.mode || 'static';
-      if (mode !== 'static' && mode !== 'rendered' && mode !== 'auto') {
-        console.warn(`[Analyze] Invalid mode: ${mode}`);
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ error: "Invalid mode. Use 'static', 'rendered' or 'auto'." }));
-      }
 
-      // Converte candidatos do navegador pelo mesmo pipeline (resolve → classifica
-      // com MIME → MediaItem → saída legada), removendo duplicatas pela URL final.
-      const buildRenderedItems = (collected) => {
-        const candidates = Array.isArray(collected.candidates) ? collected.candidates : [];
-        const seen = new Set();
-        const items = [];
-        for (const candidate of candidates) {
-          if (!candidate || typeof candidate.url !== 'string') continue;
-          const resolved = resolveMediaUrl(candidate.url, body.url);
-          if (!resolved || seen.has(resolved)) continue;
-          seen.add(resolved);
-          const classification = classifyMedia({ url: resolved, mimeType: candidate.mimeType });
-          if (!classification) continue;
-          items.push(mediaItemToLegacy(candidateToMediaItem({ url: resolved, ...classification, mimeType: candidate.mimeType }, null)));
-        }
-        return items;
-      };
-
-      console.log(`[Analyze] ${mode} mode for: ${body.url}`);
-      let result;
-      let browserWarnings = [];
-      let usedBrowser = false;
-
-      if (mode === 'rendered') {
-        const collected = await collectNetworkMedia(body.url);
-        usedBrowser = true;
-        browserWarnings = Array.isArray(collected.warnings) ? collected.warnings : [];
-        result = { title: body.url, url: body.url, items: buildRenderedItems(collected) };
-      } else {
-        result = await analyzePage(body.url);
-        // auto: só cai no navegador quando a análise estática retorna zero itens.
-        if (mode === 'auto' && result && result.items.length === 0) {
-          console.log(`[Analyze] Static returned 0 items — falling back to rendered for ${body.url}`);
-          const collected = await collectNetworkMedia(body.url);
-          usedBrowser = true;
-          browserWarnings = Array.isArray(collected.warnings) ? collected.warnings : [];
-          result = { title: body.url, url: body.url, items: buildRenderedItems(collected) };
-        }
-      }
+      console.log(`[Analyze] Analyzing: ${body.url}`);
+      const result = await analyzePage(body.url);
 
       const count = result?.items?.length || 0;
       console.log(`[Analyze] Result: ${count} item(s) for ${body.url}`);
@@ -150,9 +104,8 @@ const server = http.createServer(async (req, res) => {
       if (count === 0) {
         console.warn(`[Analyze] No items found for URL: ${body.url}`);
       }
-      const payload = usedBrowser ? { ...result, warnings: browserWarnings } : result;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(payload));
+      res.end(JSON.stringify(result));
     } catch (err) {
       console.error(`[Analyze] Error: ${err.message}`);
       res.writeHead(500, { 'Content-Type': 'application/json' });

@@ -12,7 +12,8 @@
   "badge": {
     "progressive": "Arquivo direto",
     "hls": "HLS",
-    "dash": "DASH"
+    "dash": "DASH",
+    "variants": "{count} variantes"
   },
   "nav": {
     "theme": "Alternar Tema",
@@ -40,6 +41,7 @@
     "deselect_all": "Desmarcar Todos",
     "download_selected": "Baixar Selecionados (ZIP)",
     "download": "Download",
+    "select_variant": "Selecionar variante",
     "sound": "Som ao concluir",
     "preview": "Visualizar",
     "cancel": "Cancelar",

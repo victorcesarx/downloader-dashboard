@@ -38,8 +38,24 @@ export function clearCache() {
   } catch (e) {}
 }
 
+// Associa cada `item.url` ao grupo de variantes ao qual pertence. Apenas
+// grupos com 2+ itens são registrados; itens de grupos únicos e respostas sem
+// `groups` não recebem grupo.
+function variantGroupsByUrl(data) {
+  const groups = new Map();
+  if (!data || !Array.isArray(data.groups)) return groups;
+  for (const group of data.groups) {
+    if (!group || !Array.isArray(group.itemUrls) || group.itemUrls.length < 2) continue;
+    const info = { key: group.key ?? null, urls: group.itemUrls, count: group.itemUrls.length };
+    for (const url of group.itemUrls) groups.set(url, info);
+  }
+  return groups;
+}
+
 function buildItems(data) {
+  const variantGroups = variantGroupsByUrl(data);
   return (data.items || []).map((item, idx) => {
+    const variant = variantGroups.get(item.url) || null;
     const thumb = item.thumbnail;
     const baseProxy = (u) => {
       const encoded = encodeURIComponent(u);
@@ -67,12 +83,30 @@ function buildItems(data) {
         proxyUrl: baseProxy(q.url)
       })),
       selectedQualityIndex: 0,
+      variantCount: variant ? variant.count : 0,
+      variantGroupKey: variant ? variant.key : null,
+      variantUrls: variant ? variant.urls : [],
       ext,
       size: item.size || 0,
       label: item.label || item.type,
       thumbnail: proxyThumb
     };
   });
+}
+
+// Pré-seleciona a melhor variante de cada grupo quando `groups` existir na
+// resposta. URLs desconhecidas são ignoradas; sem `groups`, nada é marcado
+// (comportamento antigo: todas desmarcadas).
+function preselectedIds(data, items) {
+  const selected = new Set();
+  if (!data || !Array.isArray(data.groups)) return selected;
+  for (const group of data.groups) {
+    const url = group && group.bestItemUrl;
+    if (typeof url !== 'string') continue;
+    const match = items.find(item => item.url === url);
+    if (match) selected.add(match.id);
+  }
+  return selected;
 }
 
 export async function analyzeUrl(url) {
@@ -85,7 +119,7 @@ export async function analyzeUrl(url) {
   const cached = getCached(trimmed);
   if (cached) {
     store.state.items = buildItems(cached);
-    store.state.selectedItemIds = new Set();
+    store.state.selectedItemIds = preselectedIds(cached, store.state.items);
     store.state.currentUrl = trimmed;
     store.state.isAnalyzing = false;
     Toast.show(t('toast.analyzed_success'), 'success');
@@ -116,7 +150,7 @@ export async function analyzeUrl(url) {
     setCached(trimmed, data);
     
     store.state.items = buildItems(data);
-    store.state.selectedItemIds = new Set();
+    store.state.selectedItemIds = preselectedIds(data, store.state.items);
     Toast.show(t('toast.analyzed_success'), 'success');
     return data;
   } catch (err) {

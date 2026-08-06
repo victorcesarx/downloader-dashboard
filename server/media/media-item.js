@@ -20,6 +20,8 @@
  * @property {'progressive'|'hls'|'dash'|null} delivery - Forma de entrega
  *   do vídeo (derivada da extensão, a menos que informada explicitamente).
  * @property {string|null} source - Origem/plataforma (ex.: "twitter").
+ * @property {number|null} confidenceScore - Confiança do candidato (0-100).
+ * @property {string[]} confidenceReasons - Motivos da pontuação.
  */
 
 export const MEDIA_TYPES = ['video', 'image', 'audio', 'document'];
@@ -100,6 +102,21 @@ export function createMediaItem(input) {
   } else {
     item.delivery = deriveDelivery(type, input.extension);
   }
+
+  // `confidenceScore`: número 0-100 ou null (padrão null).
+  const confidenceScore = input.confidenceScore === undefined ? null : input.confidenceScore;
+  if (confidenceScore !== null && (typeof confidenceScore !== 'number' || !Number.isFinite(confidenceScore) || confidenceScore < 0 || confidenceScore > 100)) {
+    throw new TypeError(`MediaItem: "confidenceScore" inválido (esperado número entre 0 e 100 ou null): ${JSON.stringify(confidenceScore)}`);
+  }
+  item.confidenceScore = confidenceScore;
+
+  // `confidenceReasons`: array de strings (padrão []), copiado para não
+  // reutilizar a referência de entrada.
+  const confidenceReasons = input.confidenceReasons === undefined ? [] : input.confidenceReasons;
+  if (!Array.isArray(confidenceReasons) || confidenceReasons.some(r => typeof r !== 'string')) {
+    throw new TypeError('MediaItem: "confidenceReasons" inválido (esperado array de strings)');
+  }
+  item.confidenceReasons = [...confidenceReasons];
 
   return item;
 }

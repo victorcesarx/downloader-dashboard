@@ -10,35 +10,42 @@
 
 ```
 downloader-dashboard/
-├── docs/
-│   ├── tasks.md                   # Checklist de tarefas (~115 linhas)
-│   └── ANALISE.md                 # Esta análise
+├── ANALISE.md                   # Esta análise
+├── tasks.md                     # Checklist de tarefas
 ├── locales/
-│   ├── pt-BR.json                 # Traduções português (~110 chaves)
-│   └── en.json                    # Traduções inglês (~110 chaves)
+│   ├── pt-BR.json                 # Traduções português (~122 chaves)
+│   └── en.json                    # Traduções inglês (~122 chaves)
 ├── scripts/
-│   ├── app.js                     # Controlador principal + SPA router (~267 linhas)
-│   ├── renderer.js                # Renderização DOM (~512 linhas)
+│   ├── app.js                     # Controlador principal + SPA router (~254 linhas)
+│   ├── renderer.js                # Renderização DOM, colapso de variantes (~830 linhas)
 │   ├── download.js                # Wrapper para downloader.js (9 linhas)
 │   ├── downloader.js              # Engine de download individual (~237 linhas)
 │   ├── download-queue.js          # Painel de fila de downloads (~156 linhas)
 │   ├── state.js                   # Gerenciamento de estado (47 linhas)
 │   ├── i18n.js                    # Internacionalização (89 linhas)
-│   ├── analyzer.js                # Análise frontend (77 linhas)
+│   ├── analyzer.js                # Análise frontend + parsing de groups (~165 linhas)
 │   ├── utils.js                   # Utilitários + Toast (91 linhas)
 │   └── zip-download.js            # Download ZIP em lote (199 linhas)
 ├── styles/
-│   └── main.css                   # Design system + componentes (~1560 linhas)
+│   └── main.css                   # Design system + componentes (~1750 linhas)
 ├── server/                        # Módulos do servidor
 │   ├── config.js                  # Constantes, cert HTTPS, TEMP_DIR
 │   ├── utils.js                   # MIME_TYPES, CACHE_DURATIONS, cookieJar, fetch
+│   ├── media/                     # Pipeline de mídia (candidatos → variantes)
+│   │   ├── build-media-candidates.js  # Extração de candidatos + dedupe por confiança
+│   │   ├── classify-media.js          # Classificação vídeo/imagem/áudio/documento
+│   │   ├── media-item.js             # MediaItem validado (delivery, confiança)
+│   │   ├── score-media-candidate.js   # Pontuação por origem (meta 90, html 80, ...)
+│   │   ├── create-variant-group-key.js # Chave de grupo a partir da URL
+│   │   ├── group-media-variants.js     # Agrupamento por chave
+│   │   └── select-best-variant.js      # Melhor variante (altura > largura > ...)
 │   ├── scrapers/
 │   │   ├── index.js               # Router de scrapers
 │   │   ├── gofile.js              # Scraper GoFile (API + fallback HTML)
 │   │   ├── pixeldrain.js          # Scraper PixelDrain (API)
 │   │   ├── cyberdrop.js           # Scraper CyberDrop (HTML + CDN)
 │   │   ├── bunkr.js               # Scraper Bunkr (CDN + signing)
-│   │   ├── generic.js             # Scraper genérico (regex + script)
+│   │   ├── generic.js             # Scraper genérico (candidatos + variantes)
 │   │   ├── erome.js               # Scraper Erome (HTML)
 │   │   └── twitter.js             # Scraper Twitter/X (HTML)
 │   ├── middleware/
@@ -51,13 +58,21 @@ downloader-dashboard/
 │   └── zip.js                     # ZIP batch: runZipTask, cleanupOrphanedZips
 ├── tests/
 │   ├── setup.js                   # Setup do Vitest (matchMedia mock)
-│   ├── backend/
-│   │   ├── server.test.js         # Testes do backend (21 testes)
-│   │   └── integration.test.js    # Testes de integração HTTP (18 testes)
-│   └── frontend/
-│       ├── utils.test.js          # Testes de utils (16 testes)
-│       ├── state.test.js          # Testes de state (6 testes)
-│       └── i18n.test.js           # Testes de i18n (12 testes)
+│   ├── backend/                   # 14 arquivos (288 testes)
+│   │   ├── server.test.js         # 22 testes (utils, cookie jar, ZIP lifecycle)
+│   │   ├── integration.test.js    # 40 testes HTTP
+│   │   ├── generic.test.js        # 37 testes (scraper + source + variantes)
+│   │   ├── extract-html-candidates.test.js # 46 testes
+│   │   ├── zip.test.js            # 50 testes (limites, redirects, SSRF)
+│   │   ├── media-item.test.js     # 16 testes
+│   │   └── ... (classify, resolve-url, score, key, group, select-best, zip-queue)
+│   └── frontend/                  # 6 arquivos (96 testes)
+│       ├── renderer.test.js       # 26 testes (selos, colapso, rótulos)
+│       ├── analyzer.test.js       # 9 testes (pré-seleção via groups)
+│       ├── zip-download.test.js   # 17 testes
+│       ├── utils.test.js          # 27 testes
+│       ├── state.test.js          # 6 testes
+│       └── i18n.test.js           # 11 testes
 ├── temp_zips/                     # Diretório temporário para arquivos ZIP
 ├── server.js                      # Servidor HTTP Node.js (~244 linhas, ~70% redução)
 ├── index.html                     # SPA: Landing + Dashboard integrados (~195 linhas)
@@ -80,7 +95,7 @@ downloader-dashboard/
 | Fontes      | DM Sans + Space Grotesk (Google Fonts)                    |
 | ZIP         | archiver v7 com `ZipArchive` + streaming para arquivo temp |
 | Proxy       | Servidor proxy próprio para bypass de CORS + Range requests |
-| Testes      | Vitest + jsdom (73 testes: unitários + integração HTTP)    |
+| Testes      | Vitest + jsdom (384 testes: unitários + integração HTTP) |
 
 ---
 
@@ -121,7 +136,7 @@ Servidor HTTP puro (sem Express) na porta **3006**, modularizado em camadas:
 **POST `/analyze`**
 - Recebe `{"url": "..."}`
 - Detecta site específico (GoFile, PixelDrain, CyberDrop, Bunkr, Erome, Twitter/X) ou faz scrape genérico
-- Retorna JSON com `{title, url, items: [{type, name, url, ext, label, size, thumbnail, qualities}]}`
+- Retorna JSON com `{title, url, items: [{type, name, url, ext, label, size, thumbnail, delivery}], groups: [{key, bestItemUrl, itemUrls}]}` — `groups` agrupa variantes da mesma mídia (qualidades) e `delivery` indica progressive/hls/dash/null
 
 **GET `/proxy`**
 - Proxy de requisições com Range headers (download parcial + player de vídeo)
@@ -164,7 +179,21 @@ Servidor HTTP puro (sem Express) na porta **3006**, modularizado em camadas:
 | **Bunkr**        | Resolução CDN + API signing    | -                           |
 | **Erome**        | Scraper HTML (vídeo + imagem)  | -                           |
 | **Twitter / X**  | Scraper HTML (MP4 + HLS + img) | -                           |
-| **Genérico**     | HTML Parser com regex + script | -                           |
+| **Genérico**     | Pipeline de candidatos + variantes (ver 4.2.1) | -                          |
+
+### 4.2.1 Pipeline de mídia (`server/media/`)
+
+Fluxo do scraper genérico (e base dos demais):
+
+1. `buildMediaCandidates(html, url)` — extrai candidatos de **atributos HTML**, `srcset`, **metatags** sociais (og:/twitter:), **JSON-LD**, `style` e `script`, resolvendo URLs relativas e classificando tipos (m3u8/mpd → hls/dash).
+2. `scoreMediaCandidate(source)` — pontua por origem (**meta 90**, json-ld 85, html 80, srcset 70, script 60, style 40, desconhecida 50).
+3. **Deduplicação** — mantém o candidato de maior pontuação no slot da primeira ocorrência da URL.
+4. `createMediaItem` (`media-item.js`) — valida tipos, expõe `delivery` (progressive/hls/dash) e metadados internos `confidenceScore`/`confidenceReasons`.
+5. `annotateVariantMetadata` — agrupa variantes:
+   - `createVariantGroupKey` — chave estável por URL: remove query/hash, normaliza hostname minúsculo, remove tokens de qualidade (`1080p|720p|480p|2160p|4k|hd|sd|hq|lq|hi|lo`) com separadores não-alfanuméricos (suporta sufixos `_hd`, `_lo`, `_hi`).
+   - `groupMediaVariants` — grupos por chave (chave nula = grupo próprio).
+   - `selectBestVariant` — melhor variante por `height` > `width` > `size` > `confidenceScore`; empate preserva a primeira; nulos valem menos que números.
+6. `buildVariantGroups` — resposta pública `groups: [{key, bestItemUrl, itemUrls}]`, sem expor objetos internos.
 
 ### 4.3 ZIP Batch Download
 
@@ -180,14 +209,14 @@ O download em lote segue este fluxo:
 
 | Módulo            | Responsabilidade                                      |
 |-------------------|-------------------------------------------------------|
-| `app.js`          | Controlador principal: SPA router, eventos, formulário |
-| `renderer.js`     | Renderização grid/lista/compacto, cards, skeleton, modal, qualidade, animação de transição de filtros |
+| `app.js`          | Controlador principal: SPA router, eventos, formulário, Selecionar Todos (respeita colapso) |
+| `renderer.js`     | Renderização grid/lista/compacto, cards, skeleton, modal, qualidade, animação; **colapso de variantes** (1 card por grupo), selo "N variantes", seletor com rótulos (quality → resolução → altura → tamanho → nome) |
 | `downloader.js`   | Download individual com progresso, pause, resume       |
 | `download.js`     | Wrapper para inicialização do downloader               |
 | `download-queue.js` | Painel de fila de downloads ativos com pause/resume/cancel |
 | `state.js`        | Estado global simples (objeto observado) com `structuredClone` para mutations imutáveis |
 | `i18n.js`         | Carregamento assíncrono de locale via fetch, `t()`, scan DOM (data-i18n, data-i18n-title, data-i18n-aria-label) |
-| `analyzer.js`     | Comunicação com `/analyze`, parsing da resposta        |
+| `analyzer.js`     | Comunicação com `/analyze`, parsing de `groups`, buildItems com metadados de grupo (`variantCount`, `variantGroupKey`, `variantUrls`), pré-seleção da melhor variante |
 | `utils.js`        | `formatBytes`, `formatSpeed`, Toast, debounce          |
 | `zip-download.js` | Painel de criação de ZIP, polling, download direto     |
 
@@ -248,11 +277,18 @@ O download em lote segue este fluxo:
 - ✅ **Tooltips i18n** — `data-i18n-title` + `title` dinâmico em todos os botões de ação (HTML e JS)
 - ✅ **Transição animada nos filtros** — fade in/out dos cards com CSS `@keyframes` ao mudar `activeFilter`
 - ✅ **Barra de progresso global ZIP** — progresso do ZIP atual visível no navbar
-- ✅ **Testes** — 73 testes Vitest (21 unitários backend + 18 integração HTTP + 16 utils + 6 state + 12 i18n)
+- ✅ **Testes** — 384 testes Vitest (288 backend + 96 frontend, 20 arquivos)
 - ✅ **Focus trap completo** no modal — `trapFocus()` com fallback para container sem elementos focáveis, `prefers-reduced-motion`
 - ✅ **Estado imutável** — `structuredClone()` para mutations de itens no `renderer.js`
 - ✅ **i18n assíncrono** — locales carregados via `fetch()` em vez de inline `window.__LOCALES__`
 - ✅ **Consolidação de estilos** — estilos inline movidos do HTML para CSS
+- ✅ **Origem e confiança dos candidatos** — cada mídia registra `source` (`generic:html|srcset|meta|json-ld|style|script`) e `confidenceScore` (0–100) com razões
+- ✅ **Agrupamento de variantes** — URLs da mesma mídia (diferentes qualidades) agrupadas por chave estável; melhor variante escolhida automaticamente (altura > largura > tamanho > confiança)
+- ✅ **Pré-seleção da melhor variante** — após análise, o item `bestItemUrl` de cada grupo já vem selecionado
+- ✅ **Cards colapsados por grupo** — variantes de um grupo viram um único card (o da variante selecionada) com selo "N variantes" e seletor; trocar a variante re-renderiza o card com os dados dela
+- ✅ **Seleção exclusiva por grupo** — marcar/trocar uma variante desmarca as demais do mesmo grupo (checkbox e seletor)
+- ✅ **Rótulos inteligentes no seletor** — `quality` → `width × height` → `height` (1080p) → `size` formatado → nome do arquivo
+- ✅ **Grupos no `/analyze`** — resposta inclui `groups` com `bestItemUrl`/`itemUrls`, sem expor objetos internos
 
 ---
 
@@ -270,14 +306,15 @@ O download em lote segue este fluxo:
 - Stream seguro: error handlers, `unhandledRejection` handler
 - Proteção SSRF no proxy (bloqueio de IPs privados, IPv6, DNS lookup)
 - Rate limiting por IP com cleanup automático (20 req/min no /analyze)
-- Testes automatizados com Vitest (73 testes, backend + frontend + integração HTTP)
+- Testes automatizados com Vitest (384 testes, backend + frontend + integração HTTP)
+- Pipeline de mídia isolado em `server/media/` — extração, pontuação, dedupe, agrupamento e seleção de variantes
 - Modal acessível com ARIA `role="dialog"`, `aria-modal`, `aria-labelledby`, foco restaurado
 - Estado gerenciado com `structuredClone` para mutations imutáveis
 - Animações CSS com `@keyframes` para transições de filtro e entrada de cards
 - Tooltips i18n em todos os botões (HTML estático + JS dinâmico)
 
 ### Pontos a Melhorar
-- **renderer.js** tem ~512 linhas — poderia ser subdividido
+- **renderer.js** tem ~830 linhas — poderia ser subdividido
 - **Sem bundler ou build step** (JS/CSS puro)
 - **Sem Dockerfile** para deploy
 - **Versionamento do package.json** defasado (1.1.0, mas commits mencionam v1.3.0)
@@ -296,7 +333,7 @@ O download em lote segue este fluxo:
 | Acessibilidade        | ✅ Boa            |
 | Internacionalização   | ✅ pt-BR + en     |
 | Tema claro/escuro     | ✅ Explícito      |
-| Testes                | ⚠️ Parcial (73: unitários + integração HTTP) |
+| Testes                | ⚠️ Parcial (384: unitários + integração HTTP) |
 | Documentação          | ⚠️ Parcial        |
 | Build / Deploy        | ❌ Nenhum setup   |
 | Gerenciamento de estado | ⚠️ Manual (Proxy global) |

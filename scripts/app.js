@@ -4,7 +4,7 @@
 import { store } from './state.js';
 import { initI18n, loadLocale, t } from './i18n.js';
 import { analyzeUrl, clearCache } from './analyzer.js';
-import { renderMediaContainer, updateBatchActionsUI, updateAllCardSelections, toggleBlur } from './renderer.js';
+import { renderMediaContainer, updateBatchActionsUI, updateAllCardSelections, toggleBlur, getDisplayItems } from './renderer.js';
 import { Toast, playBeep } from './utils.js';
 import { startZipDownload } from './zip-download.js';
 import { initQueue, toggleQueue } from './download-queue.js';
@@ -175,13 +175,10 @@ function setupEventListeners() {
 
   if (toggleSelectBtn) {
     toggleSelectBtn.addEventListener('click', () => {
-      const { items, activeFilter, searchQuery } = store.state;
       const next = new Set(store.state.selectedItemIds);
-      const filteredIds = items.filter(item => {
-        const matchesFilter = activeFilter === 'all' || item.type === activeFilter;
-        const matchesSearch = !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesFilter && matchesSearch;
-      }).map(i => i.id);
+      // Seleção opera sobre os cards exibidos: variantes colapsadas contam
+      // como um único card (o da variante selecionada do grupo).
+      const filteredIds = getDisplayItems().map(i => i.id);
 
       const allSelected = filteredIds.every(id => next.has(id));
       if (allSelected) {

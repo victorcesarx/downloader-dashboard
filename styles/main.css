@@ -823,6 +823,16 @@ a:hover {
   color: #8fd0ff;
 }
 
+.media-badge--variants {
+  color: #d3b8ff;
+}
+
+/* Quando o selo de variantes acompanha o selo de entrega, empilha acima dele
+   para não sobrepor o layout atual. */
+.media-badge + .media-badge--variants {
+  bottom: 34px;
+}
+
 .list-view .media-badge,
 .compact-view .media-badge {
   right: 6px;
@@ -1361,6 +1371,22 @@ a:hover {
 }
 .quality-select:focus {
   border-color: var(--accent-primary);
+}
+
+/* Variant selector dropdown */
+.variant-select {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  outline: none;
+  max-width: 140px;
+}
+.variant-select:focus {
+  border-color: var(--accent-secondary);
 }
 
 /* Card Download Progress */

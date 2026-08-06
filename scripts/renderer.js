@@ -19,6 +19,39 @@ function deliveryBadgeHtml(item) {
   return `<span class="media-badge media-badge--${key}">${t(`badge.${key}`)}</span>`;
 }
 
+// Selo de variantes: mostra o total de variantes do grupo (2+) do item.
+function variantBadgeHtml(item) {
+  if (!item.variantCount || item.variantCount < 2) return '';
+  return `<span class="media-badge media-badge--variants">${t('badge.variants', { count: item.variantCount })}</span>`;
+}
+
+// Rótulo de uma variante no seletor: usa os melhores dados disponíveis, nesta
+// ordem — quality → resolução completa (width × height) → altura (1080p) →
+// tamanho formatado → nome do arquivo.
+function variantLabel(member) {
+  if (member.quality) return String(member.quality);
+  if (member.width && member.height) return `${member.width} × ${member.height}`;
+  if (member.height) return `${member.height}p`;
+  if (member.size > 0) return formatBytes(member.size, 1);
+  return member.name;
+}
+
+// Controle de variante do card colapsado: lista todas as variantes do grupo e
+// marca a atualmente selecionada. Grupos com 2+ itens.
+function variantSelectHtml(item) {
+  if (!item.variantCount || item.variantCount < 2 || !item.variantGroupKey) return '';
+  const groupItems = store.state.items.filter(i => i.variantGroupKey === item.variantGroupKey);
+  const current = groupItems.find(i => store.state.selectedItemIds.has(i.id)) || item;
+  const currentUrl = current.url;
+  const options = groupItems.map(m => `
+            <option value="${sanitizeHtml(m.url)}" ${m.url === currentUrl ? 'selected' : ''}>${sanitizeHtml(variantLabel(m))}</option>`).join('');
+  return `
+            <select class="variant-select" data-key="${sanitizeHtml(item.variantGroupKey)}" aria-label="${t('actions.select_variant')}">
+              <option value="" disabled>${t('actions.select_variant')}</option>
+              ${options}
+            </select>`;
+}
+
 // Virtual scroll state
 let vs = {
   active: false,
@@ -72,6 +105,7 @@ function buildCardHtml(item, isSelected, typeIconMap) {
         ${previewContent}
         <span class="card-badge-type">${sanitizeHtml(item.label || item.type)}</span>
         ${deliveryBadgeHtml(item)}
+        ${variantBadgeHtml(item)}
       </div>
       <div class="card-body">
         <div class="card-title" title="${sanitizeHtml(item.name)}">${sanitizeHtml(item.name)}</div>
@@ -83,6 +117,7 @@ function buildCardHtml(item, isSelected, typeIconMap) {
               ${item.qualities.map((q, i) => `<option value="${i}" ${i === item.selectedQualityIndex ? 'selected' : ''}>${q.label}</option>`).join('')}
             </select>
           ` : ''}
+          ${variantSelectHtml(item)}
         </div>
         <div class="card-actions">
           <button class="btn btn-secondary btn-sm copy-link-btn" data-id="${item.id}" title="${t('actions.copy_link')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
@@ -96,9 +131,26 @@ function buildCardHtml(item, isSelected, typeIconMap) {
   `;
 }
 
-function getFiltered() {
-  const { items, activeFilter, searchQuery } = store.state;
-  return items.filter(item => {
+// Lista de exibição: variantes do mesmo grupo (2+ itens) são colapsadas em um
+// único card — o da variante selecionada, ou a primeira do grupo se nenhuma
+// estiver marcada. Itens fora de grupo seguem normais. Exportada porque o
+// "Selecionar Todos" também precisa respeitar o colapso.
+export function getDisplayItems() {
+  const { items, activeFilter, searchQuery, selectedItemIds } = store.state;
+  const seenGroups = new Set();
+  const display = [];
+  for (const item of items) {
+    if (item.variantGroupKey && item.variantCount >= 2) {
+      if (seenGroups.has(item.variantGroupKey)) continue;
+      seenGroups.add(item.variantGroupKey);
+      const group = items.filter(i => i.variantGroupKey === item.variantGroupKey);
+      const selected = group.find(i => selectedItemIds.has(i.id)) || group[0];
+      display.push(selected);
+    } else {
+      display.push(item);
+    }
+  }
+  return display.filter(item => {
     const matchesFilter = activeFilter === 'all' || item.type === activeFilter;
     const matchesSearch = !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
@@ -195,7 +247,7 @@ export function renderMediaContainer() {
     return;
   }
 
-  currentFiltered = getFiltered();
+  currentFiltered = getDisplayItems();
 
   if (countEl) {
     countEl.textContent = t('status.found_count', { count: currentFiltered.length });
@@ -276,8 +328,10 @@ function attachCardEvents(container, useDelegation = false) {
     container.addEventListener('change', (e) => {
       const cb = e.target.closest('.card-checkbox');
       const sel = e.target.closest('.quality-select');
+      const vsel = e.target.closest('.variant-select');
       if (cb) handleCheckboxChange(cb);
       if (sel) handleQualityChange(sel);
+      if (vsel) handleVariantChange(vsel);
     });
     container.addEventListener('click', (e) => {
       const db = e.target.closest('.download-btn');
@@ -299,6 +353,9 @@ function attachCardEvents(container, useDelegation = false) {
   container.querySelectorAll('.quality-select').forEach(sel => {
     sel.addEventListener('change', () => handleQualityChange(sel));
   });
+  container.querySelectorAll('.variant-select').forEach(sel => {
+    sel.addEventListener('change', () => handleVariantChange(sel));
+  });
   container.querySelectorAll('.preview-btn').forEach(btn => {
     btn.addEventListener('click', () => handlePreviewClick(btn));
   });
@@ -309,12 +366,42 @@ function attachCardEvents(container, useDelegation = false) {
 
 function handleCheckboxChange(cb) {
   const id = cb.getAttribute('data-id');
+  const item = store.state.items.find(i => i.id === id);
   const next = new Set(store.state.selectedItemIds);
-  if (cb.checked) next.add(id); else next.delete(id);
+  if (cb.checked) {
+    // Exclusividade por grupo: marcar um item desmarca os demais do grupo.
+    if (item && item.variantGroupKey) {
+      store.state.items.forEach(i => {
+        if (i.variantGroupKey === item.variantGroupKey) next.delete(i.id);
+      });
+    }
+    next.add(id);
+  } else {
+    next.delete(id);
+  }
   store.state.selectedItemIds = next;
   const card = cb.closest('.media-card');
   if (card) card.classList.toggle('selected', cb.checked);
   updateBatchActionsUI();
+}
+
+// Troca a variante selecionada do grupo: marca o item alvo e desmarca as
+// demais variantes do mesmo grupo (mantém uma única seleção por grupo). O card
+// colapsado é re-renderizado para exibir a nova variante.
+function handleVariantChange(sel) {
+  const url = sel.value;
+  if (!url) return;
+  const key = sel.getAttribute('data-key');
+  const target = store.state.items.find(i => i.variantGroupKey === key && i.url === url);
+  if (!target) return;
+  const next = new Set(store.state.selectedItemIds);
+  store.state.items.forEach(i => {
+    if (i.variantGroupKey === key) next.delete(i.id);
+  });
+  next.add(target.id);
+  store.state.selectedItemIds = next;
+  updateBatchActionsUI();
+  renderMediaContainer();
 }
 
 function handleDownloadClick(btn) {
@@ -406,12 +493,8 @@ export function updateBatchActionsUI() {
   const count = selectedIds.size;
 
   if (toggleBtn) {
-    const { items, activeFilter, searchQuery } = store.state;
-    const filteredIds = items.filter(item => {
-      const matchesFilter = activeFilter === 'all' || item.type === activeFilter;
-      const matchesSearch = !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesFilter && matchesSearch;
-    }).map(i => i.id);
+    const displayItems = getDisplayItems();
+    const filteredIds = displayItems.map(i => i.id);
     const allSelected = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id));
     toggleBtn.textContent = allSelected ? t('actions.deselect_all') : t('actions.select_all');
   }

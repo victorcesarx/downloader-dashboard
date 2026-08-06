@@ -321,10 +321,15 @@ function handleDownloadClick(btn) {
   const id = btn.getAttribute('data-id');
   const item = store.state.items.find(i => i.id === id);
   const cardEl = btn.closest('.media-card');
-  if (item) {
-    if (item.openInBrowser) window.open(item.url, '_blank');
-    else downloadSingleItem(item, cardEl);
+  if (!item) return;
+  // HLS/DASH ainda não são suportados para download direto: o item continua
+  // visível/selecionável, mas a ação é bloqueada com um aviso.
+  if (item.delivery === 'hls' || item.delivery === 'dash') {
+    Toast.show(t('toast.streaming_unsupported'), 'warning');
+    return;
   }
+  if (item.openInBrowser) window.open(item.url, '_blank');
+  else downloadSingleItem(item, cardEl);
 }
 
 function handlePreviewClick(btn) {

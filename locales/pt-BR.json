@@ -114,6 +114,7 @@
     "zip_error": "Erro ao gerar arquivo ZIP.",
     "invalid_url": "URL inválida",
     "no_media_selected": "Nenhuma mídia selecionada.",
+    "streaming_unsupported": "Este formato de streaming ainda não é suportado para download.",
     "copy_failed": "Falha ao copiar link",
     "cache_cleared": "Cache de pesquisa limpo! Próxima análise será completa."
   }

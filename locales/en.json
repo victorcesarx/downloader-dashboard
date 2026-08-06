@@ -114,6 +114,7 @@
     "zip_error": "Error generating ZIP file.",
     "invalid_url": "Invalid URL",
     "no_media_selected": "No media selected.",
+    "streaming_unsupported": "This streaming format is not supported for download yet.",
     "copy_failed": "Failed to copy link",
     "cache_cleared": "Search cache cleared! Next analysis will be full."
   }

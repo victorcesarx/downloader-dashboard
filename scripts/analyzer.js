@@ -103,7 +103,8 @@ export async function analyzeUrl(url) {
       },
       body: JSON.stringify({
         url: trimmed,
-        lang: store.state.lang
+        lang: store.state.lang,
+        mode: 'auto'
       })
     });
 

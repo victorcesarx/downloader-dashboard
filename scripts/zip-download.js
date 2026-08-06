@@ -48,6 +48,14 @@ export async function startZipDownload() {
     return;
   }
 
+  // HLS/DASH ainda não são suportados no ZIP: ficam fora do payload, mas o
+  // restante continua entrando normalmente.
+  const downloadable = selectedItems.filter(i => i.delivery !== 'hls' && i.delivery !== 'dash');
+  if (downloadable.length === 0) {
+    Toast.show(t('toast.streaming_unsupported'), 'warning');
+    return;
+  }
+
   const zipName = await promptZipName();
   if (zipName === null) return;
 
@@ -56,7 +64,7 @@ export async function startZipDownload() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        items: selectedItems.map(item => ({
+        items: downloadable.map(item => ({
           name: item.name,
           url: item.url,
           ext: item.ext
@@ -80,10 +88,10 @@ export async function startZipDownload() {
     const finalName = (zipName || 'webscope_media_pack');
     activeTasks.set(taskId, finalName.endsWith('.zip') ? finalName : finalName + '.zip');
 
-    const totalBytes = selectedItems.reduce((sum, i) => sum + (i.size || 0), 0);
-    store.state.activeZipTask = { taskId, total: selectedItems.length, totalBytes, progress: 0 };
-    updateNavbarZipProgress(0, selectedItems.length);
-    renderZipPanel(taskId, selectedItems.length, totalBytes, zipName);
+    const totalBytes = downloadable.reduce((sum, i) => sum + (i.size || 0), 0);
+    store.state.activeZipTask = { taskId, total: downloadable.length, totalBytes, progress: 0 };
+    updateNavbarZipProgress(0, downloadable.length);
+    renderZipPanel(taskId, downloadable.length, totalBytes, zipName);
     startPollingStatus(taskId);
   } catch (err) {
     console.error('ZIP start error:', err);

@@ -4,3 +4,4 @@ temp_zips/
 tests/
 *.log
 *.err
+.env

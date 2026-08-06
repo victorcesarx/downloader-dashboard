@@ -1245,6 +1245,50 @@ a:hover {
   animation: slide-down 0.4s ease both;
 }
 
+/* ZIP Panel — per-status visual states (no layout changes) */
+/* queued: waiting for a queue slot (amber tint + soft breathing glow) */
+.zip-panel--queued {
+  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning-bg) 45%, var(--bg-card));
+  animation: slide-up 0.4s var(--transition-normal) both, zip-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes zip-breathe {
+  0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning) 40%, transparent), var(--glass-shadow); }
+  50% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning) 10%, transparent), var(--glass-shadow); }
+}
+
+/* processing: active work (accent border + glow, progress bar stays live) */
+.zip-panel--processing {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary), var(--glass-shadow);
+}
+
+/* completed: success highlight */
+.zip-panel--completed {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success-bg) 60%, var(--bg-card));
+  box-shadow: 0 0 0 1px var(--success), var(--glass-shadow);
+}
+
+/* error: failure highlight */
+.zip-panel--error {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger-bg) 60%, var(--bg-card));
+  box-shadow: 0 0 0 1px var(--danger), var(--glass-shadow);
+}
+
+/* cancelled: neutral, muted */
+.zip-panel--cancelled {
+  border-color: var(--glass-border);
+  background: color-mix(in srgb, var(--glass-border) 30%, var(--bg-card));
+  box-shadow: var(--glass-shadow);
+}
+
+.zip-panel--cancelled .zip-status-text {
+  color: var(--text-muted);
+}
+
 .cancel-zip-btn {
   width: 24px;
   height: 24px;

@@ -1,10 +1,11 @@
 /**
  * Helper Utilities & Toast Component
  */
+import { t } from './i18n.js';
 
 export function formatBytes(bytes, decimals = 2) {
   if (bytes === 0) return '0 B';
-  if (!bytes || isNaN(bytes)) return 'N/A';
+  if (!bytes || isNaN(bytes)) return t('common.na') !== 'common.na' ? t('common.na') : 'N/A';
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];

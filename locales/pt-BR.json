@@ -2,7 +2,12 @@
   "app": {
     "title": "WebScope - Extrator e Downloader de Mídias",
     "subtitle": "Extraia qualquer tipo de mídia de qualquer site instantaneamente",
-    "description": "WebScope permite extrair e baixar imagens, vídeos e arquivos de qualquer site de hospedagem de forma fácil e rápida."
+    "description": "WebScope permite extrair e baixar imagens, vídeos e arquivos de qualquer site de hospedagem de forma fácil e rápida.",
+    "footer": "© 2026 WebScope - Downloader Dashboard. Desenvolvido com Node.js puro & Vanilla JS."
+  },
+  "common": {
+    "na": "N/A",
+    "media_fallback": "Mídia {n}"
   },
   "nav": {
     "theme": "Alternar Tema",
@@ -60,6 +65,8 @@
     "title": "Download em Lote (ZIP)",
     "preparing": "Preparando arquivos para compressão...",
     "progress": "Processando arquivo {current} de {total}",
+    "queued_waiting": "Aguardando na fila",
+    "queued_position": "Aguardando na fila — posição {position}",
     "download_ready": "Seu arquivo ZIP está pronto!",
     "download_btn": "Baixar ZIP Agora",
     "speed": "Velocidade: {speed}",
@@ -67,7 +74,14 @@
     "start_error": "Falha ao iniciar empacotamento ZIP",
     "task_error": "Task cancelada ou com erro",
     "rename_label": "Nomeie seu arquivo ZIP",
-    "start": "Iniciar ZIP"
+    "start": "Iniciar ZIP",
+    "error": {
+      "queue_full": "A fila de downloads está cheia. Tente novamente mais tarde.",
+      "ip_limit": "Você já possui muitas tarefas ZIP em andamento.",
+      "too_many_items": "Você selecionou arquivos demais para um único ZIP.",
+      "temp_storage_full": "Não há espaço temporário suficiente para concluir o ZIP.",
+      "size_limit_exceeded": "O tamanho máximo permitido para este ZIP foi excedido."
+    }
   },
   "modal": {
     "preview_title": "Visualizar Mídia",

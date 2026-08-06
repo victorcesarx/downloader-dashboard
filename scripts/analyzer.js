@@ -52,7 +52,7 @@ function buildItems(data) {
     return {
       id: `${Date.now()}_${idx}`,
       type: item.type || 'document',
-      name: item.name || `Media_${idx + 1}`,
+      name: item.name || t('common.media_fallback', { n: idx + 1 }),
       url: item.url,
       proxyUrl: baseProxy(item.url),
       qualities: (item.qualities || []).map(q => ({

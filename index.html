@@ -101,12 +101,12 @@
 
     <!-- Global Selection & Status Bar -->
     <div class="selection-bar">
-      <div id="found-count" class="found-count">
+      <div id="found-count" class="found-count" data-i18n="status.found_count">
         0 mídia(s) encontrada(s)
       </div>
 
       <div class="selection-actions">
-        <button id="toggle-select-btn" class="btn btn-secondary btn-sm" data-i18n-title="actions.toggle_select">Selecionar Todos</button>
+        <button id="toggle-select-btn" class="btn btn-secondary btn-sm" data-i18n="actions.select_all" data-i18n-title="actions.toggle_select">Selecionar Todos</button>
         <button id="download-selected-btn" class="btn btn-primary btn-sm" disabled data-i18n="actions.download_selected" data-i18n-title="actions.download_selected">Baixar Selecionados (ZIP) <span id="total-size-display" class="total-size-info"></span></button>
       </div>
     </div>
@@ -119,7 +119,7 @@
 
   <footer class="footer">
     <div class="container">
-      <p>&copy; 2026 WebScope - Downloader Dashboard. Desenvolvido com Node.js puro & Vanilla JS.</p>
+      <p data-i18n="app.footer">&copy; 2026 WebScope - Downloader Dashboard. Desenvolvido com Node.js puro & Vanilla JS.</p>
     </div>
   </footer>
 

@@ -671,7 +671,7 @@ export function openPreviewModal(item) {
     <div class="modal-content" role="document">
       <div class="modal-header">
         <h3 id="modal-title">${sanitizeHtml(item.name)}</h3>
-        <button class="btn btn-icon close-modal-btn" data-focus-init aria-label="${t('modal.close')}" title="${t('actions.close')}">&times;</button>
+        <button class="btn btn-icon close-modal-btn" data-focus-init aria-label="${t('actions.close')}" title="${t('actions.close')}">&times;</button>
       </div>
       <div class="modal-body">
         ${bodyContent}

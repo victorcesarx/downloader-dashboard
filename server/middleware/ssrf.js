@@ -12,7 +12,8 @@ function isPrivateIPv4(ip) {
   const num = ipv4ToNum(ip);
   if (num === null) return false;
   if (num === 0) return true;
-  if (num === 2130706432) return true;
+  // 127.0.0.0/8 (loopback).
+  if (num >= 2130706432 && num <= 2147483647) return true;
   if (num >= 2851995648 && num <= 2852061183) return true;
   if (num >= 167772160 && num <= 184549375) return true;
   if (num >= 2886729728 && num <= 2887778303) return true;

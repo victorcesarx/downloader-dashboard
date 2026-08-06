@@ -2,7 +2,12 @@
   "app": {
     "title": "WebScope - Media Extractor & Downloader",
     "subtitle": "Extract any type of media from any site instantly",
-    "description": "Extract videos, audio, images and documents from any site instantly for individual or batch (ZIP) download."
+    "description": "Extract videos, audio, images and documents from any site instantly for individual or batch (ZIP) download.",
+    "footer": "© 2026 WebScope - Downloader Dashboard. Built with vanilla Node.js & Vanilla JS."
+  },
+  "common": {
+    "na": "N/A",
+    "media_fallback": "Media {n}"
   },
   "nav": {
     "theme": "Toggle Theme",
@@ -60,6 +65,8 @@
     "title": "Batch Download (ZIP)",
     "preparing": "Preparing files for compression...",
     "progress": "Processing file {current} of {total}",
+    "queued_waiting": "Waiting in queue",
+    "queued_position": "Waiting in queue — position {position}",
     "download_ready": "Your ZIP file is ready!",
     "download_btn": "Download ZIP Now",
     "speed": "Speed: {speed}",
@@ -67,7 +74,14 @@
     "start_error": "Failed to start ZIP packaging",
     "task_error": "Task cancelled or error",
     "rename_label": "Name your ZIP file",
-    "start": "Start ZIP"
+    "start": "Start ZIP",
+    "error": {
+      "queue_full": "The download queue is full. Please try again later.",
+      "ip_limit": "You already have too many ZIP tasks in progress.",
+      "too_many_items": "You selected too many files for a single ZIP.",
+      "temp_storage_full": "There is not enough temporary space to complete the ZIP.",
+      "size_limit_exceeded": "The maximum allowed size for this ZIP has been exceeded."
+    }
   },
   "modal": {
     "preview_title": "Media Preview",

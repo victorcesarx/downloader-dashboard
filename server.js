@@ -19,11 +19,11 @@ import { scrapeGeneric } from './server/scrapers/generic.js';
 import { scrapeErome } from './server/scrapers/erome.js';
 import { scrapeTwitter } from './server/scrapers/twitter.js';
 
-import { PORT, TEMP_DIR, AUTH_TOKEN, BODY_LIMIT_AUTH, BODY_LIMIT_ANALYZE, BODY_LIMIT_ZIP, httpsOptions, RATE_LIMIT_MAX } from './server/config.js';
+import { PORT, TEMP_DIR, AUTH_TOKEN, BODY_LIMIT_AUTH, BODY_LIMIT_ANALYZE, BODY_LIMIT_ZIP, ZIP_MAX_ITEMS, ZIP_MAX_TASKS_PER_IP, httpsOptions, RATE_LIMIT_MAX } from './server/config.js';
 import { rateLimit } from './server/middleware/rate-limit.js';
 import { collectBody } from './server/middleware/body-collector.js';
 import { requireAuth, sendUnauthorized } from './server/middleware/auth.js';
-import { zipTasks, runZipTask, cleanupZipTask, removeZipFile, cleanupOrphanedZips } from './server/zip.js';
+import { zipTasks, runZipTask, createZipTask, zipTaskQueue, cleanupZipTask, removeZipFile, cleanupOrphanedZips } from './server/zip.js';
 import { handleProxy } from './server/proxy.js';
 import { serveStatic } from './server/static.js';
 
@@ -131,9 +131,57 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: 'No items provided for ZIP' }));
       }
 
+      if (items.length > ZIP_MAX_ITEMS) {
+        console.warn(`[ZIP] Too many items: ${items.length} exceeds max ${ZIP_MAX_ITEMS}`);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+          error: {
+            code: 'ZIP_TOO_MANY_ITEMS',
+            message: 'Número máximo de arquivos excedido.'
+          }
+        }));
+      }
+
+      // Limite de tarefas ZIP por IP: conta apenas as tarefas vivas (queued +
+      // processing) do mesmo cliente. completed/cancelled/error não entram.
+      const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+      let activeForIp = 0;
+      for (const t of zipTasks.values()) {
+        if (t.clientIp === clientIp && (t.status === 'queued' || t.status === 'processing')) activeForIp++;
+      }
+      if (activeForIp >= ZIP_MAX_TASKS_PER_IP) {
+        console.warn(`[ZIP] IP limit reached for ${clientIp}: ${activeForIp}/${ZIP_MAX_TASKS_PER_IP}`);
+        res.writeHead(429, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+          error: {
+            code: 'ZIP_IP_LIMIT_REACHED',
+            message: 'Você já possui muitas tarefas ZIP em andamento.'
+          }
+        }));
+      }
+
       const taskId = `zip_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      console.log(`[ZIP] Starting task ${taskId} with ${items.length} file(s)`);
-      runZipTask(taskId, items);
+      console.log(`[ZIP] Creating task ${taskId} with ${items.length} file(s)`);
+
+      // Registra a tarefa com status inicial 'queued' e a coloca na fila.
+      createZipTask(taskId, items, { clientIp });
+      try {
+        zipTaskQueue.enqueue({ taskId, items });
+      } catch (err) {
+        // Fila cheia: remove a tarefa provisória (nunca chegou a ser enfileirada
+        // nem executada) e responde 503 sem deixar órfãs.
+        if (err && err.code === 'ZIP_QUEUE_FULL') {
+          zipTasks.delete(taskId);
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({
+            error: {
+              code: 'ZIP_QUEUE_FULL',
+              message: 'A fila de downloads ZIP está cheia. Tente novamente mais tarde.'
+            }
+          }));
+        }
+        throw err;
+      }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ taskId }));
@@ -155,6 +203,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
+    const isLive = task.status === 'queued' || task.status === 'processing';
     return res.end(JSON.stringify({
       processed: task.processed,
       total: task.total,
@@ -162,7 +211,8 @@ const server = http.createServer(async (req, res) => {
       speed: task.speed,
       currentName: task.currentName,
       status: task.status,
-      error: task.error
+      error: task.error,
+      queuePosition: isLive ? zipTaskQueue.getPosition(taskId) : null
     }));
   }
 
@@ -223,9 +273,17 @@ const server = http.createServer(async (req, res) => {
     const task = zipTasks.get(taskId);
     if (task) {
       console.log(`[ZIP] Cancelling task: ${taskId}`);
-      await cleanupZipTask(task, { status: 'cancelled', abort: true });
-      await removeZipFile(task.zipFilePath);
-      zipTasks.delete(taskId);
+      if (task.status === 'queued') {
+        // Tarefa ainda na fila: apenas a remove de waiting e marca como
+        // cancelada sem nunca executar runZipTask (nem criar ZIP/temporários).
+        zipTaskQueue.cancel(taskId);
+        task.status = 'cancelled';
+        task.finishedAt = Date.now();
+      } else {
+        await cleanupZipTask(task, { status: 'cancelled', abort: true });
+        await removeZipFile(task.zipFilePath);
+        zipTasks.delete(taskId);
+      }
     } else {
       console.warn(`[ZIP] Cancel request for unknown task: ${taskId}`);
     }
@@ -275,6 +333,7 @@ export {
   cookieJar,
   zipTasks,
   runZipTask,
+  zipTaskQueue,
   enrichItemSizes,
   MIME_TYPES,
   CACHE_DURATIONS,

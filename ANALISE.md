@@ -17,7 +17,17 @@ downloader-dashboard/
 │   └── en.json                    # Traduções inglês (~122 chaves)
 ├── scripts/
 │   ├── app.js                     # Controlador principal + SPA router (~254 linhas)
-│   ├── renderer.js                # Renderização DOM, colapso de variantes (~830 linhas)
+│   ├── renderer.js                # Shim de compatibilidade — re-exporta scripts/renderer/ (11 linhas)
+│   ├── renderer/                  # Renderização modularizada (ex-renderer.js ~830 linhas)
+│   │   ├── index.js               # Orquestrador: renderMediaContainer + doActualRender (88 linhas)
+│   │   ├── cards.js               # Builders HTML: selos, seletor de variantes, card (80 linhas)
+│   │   ├── display.js             # getDisplayItems (colapso de variantes + filtros) (26 linhas)
+│   │   ├── skeleton.js            # Skeleton loading (18 linhas)
+│   │   ├── lazy.js                # Batching de lazy render + sentinel + fetch de tamanho (80 linhas)
+│   │   ├── events.js              # Handlers dos cards + attachCardEvents (161 linhas)
+│   │   ├── modal.js               # Modal de preview + focus trap (103 linhas)
+│   │   ├── virtual-scroll.js      # Engine de virtual scroll (130 linhas)
+│   │   └── batch.js               # Ações em lote, seleção, blur (74 linhas)
 │   ├── download.js                # Wrapper para downloader.js (9 linhas)
 │   ├── downloader.js              # Engine de download individual (~237 linhas)
 │   ├── download-queue.js          # Painel de fila de downloads (~156 linhas)
@@ -210,7 +220,7 @@ O download em lote segue este fluxo:
 | Módulo            | Responsabilidade                                      |
 |-------------------|-------------------------------------------------------|
 | `app.js`          | Controlador principal: SPA router, eventos, formulário, Selecionar Todos (respeita colapso) |
-| `renderer.js`     | Renderização grid/lista/compacto, cards, skeleton, modal, qualidade, animação; **colapso de variantes** (1 card por grupo), selo "N variantes", seletor com rótulos (quality → resolução → altura → tamanho → nome) |
+| `renderer/`       | Renderização modularizada: **index.js** (orquestrador + API pública), **cards.js** (HTML builders), **display.js** (colapso), **skeleton.js**, **lazy.js** (batching), **events.js** (handlers), **modal.js**, **virtual-scroll.js**, **batch.js** |
 | `downloader.js`   | Download individual com progresso, pause, resume       |
 | `download.js`     | Wrapper para inicialização do downloader               |
 | `download-queue.js` | Painel de fila de downloads ativos com pause/resume/cancel |
@@ -289,6 +299,7 @@ O download em lote segue este fluxo:
 - ✅ **Seleção exclusiva por grupo** — marcar/trocar uma variante desmarca as demais do mesmo grupo (checkbox e seletor)
 - ✅ **Rótulos inteligentes no seletor** — `quality` → `width × height` → `height` (1080p) → `size` formatado → nome do arquivo
 - ✅ **Grupos no `/analyze`** — resposta inclui `groups` com `bestItemUrl`/`itemUrls`, sem expor objetos internos
+- ✅ **Renderer modularizado** — `scripts/renderer/` com 9 módulos especializados (cards, display, skeleton, lazy, events, modal, virtual-scroll, batch) + `index.js` como orquestrador/API pública e `renderer.js` como shim de compatibilidade
 
 ---
 
@@ -314,7 +325,6 @@ O download em lote segue este fluxo:
 - Tooltips i18n em todos os botões (HTML estático + JS dinâmico)
 
 ### Pontos a Melhorar
-- **renderer.js** tem ~830 linhas — poderia ser subdividido
 - **Sem bundler ou build step** (JS/CSS puro)
 - **Sem Dockerfile** para deploy
 - **Versionamento do package.json** defasado (1.1.0, mas commits mencionam v1.3.0)
@@ -343,12 +353,10 @@ O download em lote segue este fluxo:
 
 ## 8. Recomendações
 
-1. **Modularizar renderer.js** (separar card, modal, grid, skeleton, batch) — ~512 linhas atualmente
-2. **Manter padrão de scrapers dedicados** — todo novo scraper específico deve ser criado em `server/scrapers/` como arquivo individual (ex.: `server/scrapers/youtube.js`), registrado em `server/scrapers/index.js`, sem poluir `server.js` ou `server/scrapers/generic.js`. O padrão atual garante isolamento de lógica e facilita manutenção.
-3. **Adicionar build step** (esbuild ou vite) para minificação
-4. **Adicionar Dockerfile** para deploy
-5. **Adicionar service worker** para cache de assets e PWA
-6. **Suporte a mais fontes** (YouTube, Vimeo, Instagram, Google Drive)
-7. **Sincronizar versionamento** entre git e package.json
-8. **Keyboard shortcuts** — Ctrl+Enter para analisar, atalhos de navegação nos cards
-9. **Virtual scrolling** — substituir lazy loading atual para listas com 1000+ itens
+1. **Manter padrão de scrapers dedicados** — todo novo scraper específico deve ser criado em `server/scrapers/` como arquivo individual (ex.: `server/scrapers/youtube.js`), registrado em `server/scrapers/index.js`, sem poluir `server.js` ou `server/scrapers/generic.js`. O padrão atual garante isolamento de lógica e facilita manutenção.
+2. **Adicionar build step** (esbuild ou vite) para minificação
+3. **Adicionar Dockerfile** para deploy
+4. **Adicionar service worker** para cache de assets e PWA
+5. **Suporte a mais fontes** (YouTube, Vimeo, Instagram, Google Drive)
+6. **Sincronizar versionamento** entre git e package.json
+7. **Keyboard shortcuts** — Ctrl+Enter para analisar, atalhos de navegação nos cards

@@ -2,14 +2,21 @@
  * Main Application Controller (app.js)
  */
 import { store } from './state.js';
-import { initI18n, loadLocale, t } from './i18n.js';
+import { initI18n, onLocaleChange, t } from './i18n.js';
 import { analyzeUrl, clearCache } from './analyzer.js';
 import { renderMediaContainer, updateBatchActionsUI, updateAllCardSelections, toggleBlur, getDisplayItems } from './renderer.js';
 import { Toast } from './utils.js';
 import { startZipDownload } from './zip-download.js';
-import { initQueue, toggleQueue } from './download-queue.js';
+import { initQueue } from './download-queue.js';
+import { toggleRightPanel } from './right-panel.js';
+import { initMediaInspector } from './media-inspector.js';
+import { initUrlHistory, recordAnalyzedUrl } from './url-history.js';
+import { initPreferencesPanel } from './preferences-panel.js';
+import { updatePreference } from './preferences.js';
 
 function initRouter() {
+  initMediaInspector();
+  initPreferencesPanel();
   renderMediaContainer();
   updateBatchActionsUI();
 }
@@ -53,34 +60,36 @@ function setupEventListeners() {
     themeInput.addEventListener('change', () => {
       const nextTheme = themeInput.checked ? 'light' : 'dark';
       store.state.theme = nextTheme;
+      store.state.themePreference = nextTheme;
       document.documentElement.setAttribute('data-theme', nextTheme);
       localStorage.setItem('downdash_theme', nextTheme);
+      updatePreference('theme', nextTheme);
     });
   }
 
-  // Language Selector
-  const langSelect = document.getElementById('lang-select');
-  if (langSelect) {
-    langSelect.value = store.state.lang;
-    langSelect.addEventListener('change', async (e) => {
-      await loadLocale(e.target.value);
-      renderMediaContainer();
-      updateBatchActionsUI();
-    });
-  }
+  onLocaleChange(() => {
+    renderMediaContainer();
+    updateBatchActionsUI();
+  });
 
   // URL Analyze Form
   const analyzeForm = document.getElementById('analyze-form');
   const urlInput = document.getElementById('url-input');
   const searchWrapper = document.querySelector('.search-box-wrapper');
   if (analyzeForm && urlInput) {
+    const runAnalysis = async (url) => {
+      const result = await analyzeUrl(url);
+      if (result) recordAnalyzedUrl(url);
+      renderMediaContainer();
+      updateBatchActionsUI();
+      return result;
+    };
+    initUrlHistory(urlInput, runAnalysis);
     analyzeForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const url = urlInput.value.trim();
       if (url) {
-        await analyzeUrl(url);
-        renderMediaContainer();
-        updateBatchActionsUI();
+        await runAnalysis(url);
       }
     });
 
@@ -135,6 +144,19 @@ function setupEventListeners() {
     });
   }
 
+  // Media sorting (kept for the current browser session)
+  const sortOrderSelect = document.getElementById('sort-order-select');
+  if (sortOrderSelect) {
+    const validSortOrders = new Set([...sortOrderSelect.options].map(option => option.value));
+    if (!validSortOrders.has(store.state.sortOrder)) store.state.sortOrder = 'original';
+    sortOrderSelect.value = store.state.sortOrder;
+    sortOrderSelect.addEventListener('change', () => {
+      store.state.sortOrder = sortOrderSelect.value;
+      sessionStorage.setItem('downdash_sort', store.state.sortOrder);
+      renderMediaContainer();
+    });
+  }
+
   // View Mode Toggles (Grid / List / Compact)
   const viewModeMap = { grid: 'view-grid-btn', list: 'view-list-btn', compact: 'view-compact-btn' };
 
@@ -166,6 +188,7 @@ function setupEventListeners() {
       store.state.thumbBlurred = !store.state.thumbBlurred;
       nsfwBtn.classList.toggle('active', store.state.thumbBlurred);
       localStorage.setItem('downdash_blur', store.state.thumbBlurred);
+      updatePreference('thumbBlurred', store.state.thumbBlurred);
       toggleBlur();
     });
   }
@@ -202,6 +225,7 @@ function setupEventListeners() {
       const next = !store.state.soundEnabled;
       store.state.soundEnabled = next;
       localStorage.setItem('downdash_sound', next);
+      updatePreference('soundEnabled', next);
       soundBtn.classList.toggle('active', next);
     });
   }
@@ -211,7 +235,7 @@ function setupEventListeners() {
   if (queueToggleBtn) {
     queueToggleBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      toggleQueue();
+      toggleRightPanel('downloads');
     });
   }
 
@@ -233,6 +257,15 @@ function setupEventListeners() {
         analyzeBtn.innerHTML = `<span class="spinner"></span> ${store.state.isAnalyzing ? t('search.analyzing') : t('search.analyze_btn')}`;
       }
       renderMediaContainer();
+    }
+    if (prop === 'thumbBlurred') {
+      nsfwBtn?.classList.toggle('active', store.state.thumbBlurred);
+      toggleBlur();
+    }
+    if (prop === 'soundEnabled') soundBtn?.classList.toggle('active', store.state.soundEnabled);
+    if (prop === 'theme') {
+      document.documentElement.setAttribute('data-theme', store.state.theme);
+      if (themeInput) themeInput.checked = store.state.theme === 'light';
     }
   });
 

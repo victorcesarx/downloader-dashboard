@@ -23,9 +23,10 @@ import { PORT, TEMP_DIR, AUTH_TOKEN, BODY_LIMIT_AUTH, BODY_LIMIT_ANALYZE, BODY_L
 import { rateLimit } from './server/middleware/rate-limit.js';
 import { collectBody } from './server/middleware/body-collector.js';
 import { requireAuth, sendUnauthorized } from './server/middleware/auth.js';
-import { zipTasks, runZipTask, createZipTask, zipTaskQueue, cleanupZipTask, removeZipFile, cleanupOrphanedZips } from './server/zip.js';
+import { zipTasks, zipRetryReports, runZipTask, createZipTask, zipTaskQueue, cleanupZipTask, removeZipFile, cleanupOrphanedZips } from './server/zip.js';
 import { handleProxy } from './server/proxy.js';
 import { serveStatic } from './server/static.js';
+import { probeMedia } from './server/media/probe-media.js';
 
 // HTTP Server & Route Handler
 const server = http.createServer(async (req, res) => {
@@ -119,6 +120,29 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && pathname === '/media-metadata') {
+    const rl = rateLimit(req);
+    res.setHeader('X-RateLimit-Limit', RATE_LIMIT_MAX);
+    res.setHeader('X-RateLimit-Remaining', rl.remaining);
+    if (!rl.allowed) {
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Too many requests' }));
+    }
+    const targetUrl = reqUrl.searchParams.get('url');
+    if (!targetUrl) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'URL parameter missing' }));
+    }
+    try {
+      const metadata = await probeMedia(targetUrl);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify(metadata));
+    } catch (error) {
+      res.writeHead(error.status || 502, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: error.message || 'Metadata probe failed' }));
+    }
+  }
+
   if (req.method === 'POST' && pathname === '/download-zip') {
     let bodyStr;
     try {
@@ -127,14 +151,15 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = JSON.parse(bodyStr);
       const items = body.items || [];
+      const ignoredItems = Array.isArray(body.ignoredItems) ? body.ignoredItems : [];
       if (items.length === 0) {
         console.warn(`[ZIP] No items provided`);
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'No items provided for ZIP' }));
       }
 
-      if (items.length > ZIP_MAX_ITEMS) {
-        console.warn(`[ZIP] Too many items: ${items.length} exceeds max ${ZIP_MAX_ITEMS}`);
+      if (items.length + ignoredItems.length > ZIP_MAX_ITEMS) {
+        console.warn(`[ZIP] Too many items: ${items.length + ignoredItems.length} exceeds max ${ZIP_MAX_ITEMS}`);
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
           error: {
@@ -166,7 +191,7 @@ const server = http.createServer(async (req, res) => {
       console.log(`[ZIP] Creating task ${taskId} with ${items.length} file(s)`);
 
       // Registra a tarefa com status inicial 'queued' e a coloca na fila.
-      createZipTask(taskId, items, { clientIp });
+      createZipTask(taskId, items, { clientIp, ignoredItems });
       try {
         zipTaskQueue.enqueue({ taskId, items });
       } catch (err) {
@@ -195,6 +220,41 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && pathname.startsWith('/download-zip/retry/')) {
+    const sourceTaskId = pathname.replace('/download-zip/retry/', '');
+    const sourceTask = zipTasks.get(sourceTaskId) || zipRetryReports.get(sourceTaskId);
+    const failedItems = sourceTask?.itemResults
+      ?.filter(result => result.outcome === 'failed' && result.item?.url)
+      .map(result => result.item) || [];
+    if (!sourceTask || failedItems.length === 0) {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: { code: 'ZIP_NO_FAILED_ITEMS', message: 'No failed ZIP items to retry' } }));
+    }
+
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+    let activeForIp = 0;
+    for (const task of zipTasks.values()) {
+      if (task.clientIp === clientIp && (task.status === 'queued' || task.status === 'processing')) activeForIp++;
+    }
+    if (activeForIp >= ZIP_MAX_TASKS_PER_IP) {
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: { code: 'ZIP_IP_LIMIT_REACHED', message: 'Too many ZIP tasks in progress' } }));
+    }
+
+    const taskId = `zip_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    createZipTask(taskId, failedItems, { clientIp, retryOf: sourceTaskId });
+    try {
+      zipTaskQueue.enqueue({ taskId, items: failedItems });
+    } catch (err) {
+      zipTasks.delete(taskId);
+      const status = err?.code === 'ZIP_QUEUE_FULL' ? 503 : 500;
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: { code: err?.code || 'ZIP_RETRY_ERROR', message: err?.message || 'ZIP retry failed' } }));
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ taskId, total: failedItems.length, retryOf: sourceTaskId }));
+  }
+
   if (req.method === 'GET' && pathname.startsWith('/download-zip/status/')) {
     const taskId = pathname.replace('/download-zip/status/', '');
     const task = zipTasks.get(taskId);
@@ -214,6 +274,15 @@ const server = http.createServer(async (req, res) => {
       currentName: task.currentName,
       status: task.status,
       error: task.error,
+      retryOf: task.retryOf || null,
+      report: [...(task.itemResults || []), ...(task.ignoredResults || [])].map(result => ({
+        index: result.index,
+        name: result.name,
+        ext: result.ext,
+        outcome: result.outcome,
+        reason: result.reason,
+        httpStatus: result.httpStatus
+      })),
       queuePosition: isLive ? zipTaskQueue.getPosition(taskId) : null
     }));
   }
@@ -251,6 +320,10 @@ const server = http.createServer(async (req, res) => {
       } else {
         removeZipFile(task.zipFilePath);
       }
+      zipRetryReports.set(taskId, {
+        itemResults: task.itemResults || [],
+        savedAt: Date.now(),
+      });
       zipTasks.delete(taskId);
     };
 

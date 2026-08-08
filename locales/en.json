@@ -6,6 +6,8 @@
   },
   "common": {
     "na": "N/A",
+    "unknown": "Unknown",
+    "known_plus_unknown": "{size} + {count} unknown",
     "media_fallback": "Media {n}"
   },
   "badge": {
@@ -27,27 +29,106 @@
     "analyzing": "Analyzing...",
     "drop_here": "Drop URL here"
   },
+  "history": {
+    "title": "Recent URLs",
+    "clear": "Clear",
+    "empty": "No recent URLs",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "remove": "Remove"
+  },
+  "preferences": {
+    "title": "Preferences",
+    "subtitle": "WebScope settings",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "theme_system": "System",
+    "theme_dark": "Dark",
+    "theme_light": "Light",
+    "language": "Language",
+    "nsfw": "Blur NSFW content",
+    "nsfw_hint": "Applied to thumbnails",
+    "downloads": "Downloads",
+    "sound": "Completion sound",
+    "sound_hint": "Alerts when a file finishes",
+    "notifications": "System notifications",
+    "notifications_hint": "Shows an alert outside the tab",
+    "quality": "Preferred quality",
+    "quality_best": "Best available",
+    "concurrency": "Simultaneous downloads",
+    "concurrency_hint": "Limits connection usage",
+    "history": "History",
+    "retention": "Records retained",
+    "retention_hint": "Completed and failed this session",
+    "reset": "Restore defaults",
+    "autosave": "Changes are saved automatically"
+  },
   "filters": {
     "all": "All",
     "video": "Videos",
     "image": "Images",
     "audio": "Audio",
-    "document": "Documents"
+    "document": "Documents",
+    "search_input": "Search media..."
+  },
+  "sort": {
+    "label": "Sort media",
+    "original": "Original",
+    "name_asc": "Name A–Z",
+    "name_desc": "Name Z–A",
+    "size_desc": "Largest size",
+    "size_asc": "Smallest size",
+    "quality_desc": "Highest quality",
+    "quality_asc": "Lowest quality",
+    "type": "By type"
   },
   "actions": {
     "select_all": "Select All",
     "deselect_all": "Deselect All",
     "download_selected": "Download Selected (ZIP)",
     "download": "Download",
+    "select": "Select",
+    "deselect": "Deselect",
     "select_variant": "Select variant",
     "sound": "Completion sound",
     "preview": "Preview",
     "cancel": "Cancel",
     "close": "Close",
     "copy_link": "Copy Link",
+    "inspect": "Inspect media",
+    "details": "Details",
+    "open_original": "Open original",
     "nsfw_title": "Toggle NSFW blur",
     "toggle_select": "Select or deselect all filtered media",
     "clear_cache": "Clear search cache"
+  },
+  "inspector": {
+    "title": "Media Inspector",
+    "file_details": "File details",
+    "source_details": "Source and confidence",
+    "type": "Type",
+    "type_video": "Video",
+    "type_image": "Image",
+    "type_audio": "Audio",
+    "type_document": "Document",
+    "size": "Size",
+    "resolution": "Resolution",
+    "duration": "Duration",
+    "quality": "Quality",
+    "delivery": "Delivery",
+    "source": "Source",
+    "confidence": "Confidence",
+    "confidence_reasons": "Evidence",
+    "url": "Direct URL",
+    "copied": "Copied!",
+    "source_unavailable": "Source data is unavailable for this media."
+    ,"variants": "Available variants"
+    ,"aspect_ratio": "Aspect ratio"
+    ,"container": "Container"
+    ,"refresh": "Refresh metadata"
+    ,"probing": "Probing…"
+    ,"copy_json": "Copy JSON"
+    ,"probe_failed": "Metadata could not be refreshed."
   },
   "views": {
     "grid": "Grid",
@@ -78,6 +159,19 @@
     "task_error": "Task cancelled or error",
     "rename_label": "Name your ZIP file",
     "start": "Start ZIP",
+    "report_title": "ZIP report",
+    "report_summary": "Report: {completed} completed, {failed} failed, {ignored} ignored",
+    "report_completed": "Completed",
+    "report_failed": "Failed",
+    "report_ignored": "Ignored",
+    "report_pending": "Pending",
+    "retry_failed": "Retry failures ({count})",
+    "retry_started": "A new task was created for {count} failed file(s).",
+    "retry_error": "Could not retry the failed files.",
+    "export_json": "Export JSON",
+    "export_text": "Export text",
+    "reason_unsupported_hls": "HLS streaming is not supported in ZIP files",
+    "reason_unsupported_dash": "DASH streaming is not supported in ZIP files",
     "error": {
       "queue_full": "The download queue is full. Please try again later.",
       "ip_limit": "You already have too many ZIP tasks in progress.",
@@ -96,14 +190,21 @@
     "complete": "Download complete!",
     "error": "Download error",
     "downloading": "Downloading",
+    "queued": "Waiting for a slot",
     "paused": "Paused",
     "paused_at": "Paused — {pct}%",
     "retry": "Try again",
+    "retrying": "Retry {attempt}/{max} shortly",
+    "retry_wait": "Waiting to retry",
+    "attempt": "Attempt {attempt}/{max}",
     "done": "Done"
   },
   "queue": {
     "empty": "No active downloads",
     "clear_done": "Clear completed",
+    "clear_failed": "Clear failed",
+    "download_again": "Download again",
+    "remove": "Remove",
     "active_one": "{count} active download",
     "active_other": "{count} active downloads",
     "tab_active": "Active",

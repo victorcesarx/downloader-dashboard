@@ -15,6 +15,7 @@ const __dirname = path.dirname(__filename);
 
 export const ZIP_RETENTION_MS = 30 * 60 * 1000;
 export const zipTasks = new Map();
+export const zipRetryReports = new Map();
 
 function pruneExpiredZipTasks(now = Date.now()) {
   let removedTasks = 0;
@@ -25,6 +26,9 @@ function pruneExpiredZipTasks(now = Date.now()) {
       zipTasks.delete(taskId);
       removedTasks++;
     }
+  }
+  for (const [taskId, report] of zipRetryReports.entries()) {
+    if (now - report.savedAt > ZIP_RETENTION_MS) zipRetryReports.delete(taskId);
   }
   return removedTasks;
 }
@@ -250,6 +254,24 @@ export async function createZipTask(taskId, items, options = {}) {
     enqueuedAt: Date.now(),
     finishedAt: null,
     error: null,
+    retryOf: options.retryOf || null,
+    itemResults: items.map((item, index) => ({
+      index,
+      name: item.name,
+      ext: item.ext || null,
+      outcome: 'pending',
+      reason: null,
+      httpStatus: null,
+      item: { name: item.name, url: item.url, ext: item.ext }
+    })),
+    ignoredResults: (options.ignoredItems || []).map((item, index) => ({
+      index,
+      name: item.name,
+      ext: item.ext || null,
+      outcome: 'ignored',
+      reason: item.reason || 'unsupported format',
+      httpStatus: null
+    })),
     // options.tempDir permite injetar um diretório temporário isolado em testes; em produção TEMP_DIR é usado.
     zipFilePath: path.join(options.tempDir || TEMP_DIR, `${taskId}.zip`),
     tmpDir: null,
@@ -345,6 +367,22 @@ export async function runZipTask(taskId, items, options = {}) {
     let index = 0;
     let completed = 0;
     const errors = [];
+    const recordFailure = (itemIdx, detail = {}) => {
+      const result = task.itemResults[itemIdx];
+      if (!result || result.outcome === 'failed') return;
+      const reason = detail.error || (detail.status ? `HTTP ${detail.status}` : 'download failed');
+      result.outcome = 'failed';
+      result.reason = reason;
+      result.httpStatus = detail.status || null;
+      errors.push({ name: result.name, error: reason, status: result.httpStatus });
+    };
+    const recordCompleted = (itemIdx) => {
+      const result = task.itemResults[itemIdx];
+      if (!result) return;
+      result.outcome = 'completed';
+      result.reason = null;
+      result.httpStatus = null;
+    };
     task.tmpDir = path.join(options.tempDir || TEMP_DIR, `${taskId}_items`);
     fs.mkdirSync(task.tmpDir, { recursive: true });
 
@@ -439,7 +477,7 @@ export async function runZipTask(taskId, items, options = {}) {
       const resolved = await resolveItemFetchUrl(item.url);
       if (resolved.error) {
         console.error(`[ZIP] Task ${taskId}: skipping ${item.name}: ${resolved.error}`);
-        errors.push({ name: item.name, error: resolved.error });
+        recordFailure(itemIdx, { error: resolved.error });
         completed++;
         task.processed = completed;
         return;
@@ -482,20 +520,20 @@ export async function runZipTask(taskId, items, options = {}) {
             const location = itemRes.headers.get('location');
             if (!location) {
               console.warn(`[ZIP] Task ${taskId}: HTTP ${itemRes.status} without Location for ${item.name}`);
-              errors.push({ name: item.name, status: itemRes.status, error: 'redirect without Location header' });
+              recordFailure(itemIdx, { status: itemRes.status, error: 'redirect without Location header' });
               failed = true;
               break;
             }
             if (redirectCount >= MAX_REDIRECTS) {
               console.error(`[ZIP] Task ${taskId}: too many redirects for ${item.name} (max ${MAX_REDIRECTS})`);
-              errors.push({ name: item.name, error: `too many redirects (max ${MAX_REDIRECTS})` });
+              recordFailure(itemIdx, { error: `too many redirects (max ${MAX_REDIRECTS})` });
               failed = true;
               break;
             }
             const redirect = await resolveRedirectUrl(location, currentUrl);
             if (redirect.error) {
               console.error(`[ZIP] Task ${taskId}: blocked redirect for ${item.name}: ${redirect.error}`);
-              errors.push({ name: item.name, error: redirect.error });
+              recordFailure(itemIdx, { error: redirect.error });
               failed = true;
               break;
             }
@@ -506,7 +544,7 @@ export async function runZipTask(taskId, items, options = {}) {
           if (failed) break;
           if (!itemRes.ok) {
             console.warn(`[ZIP] Task ${taskId}: HTTP ${itemRes.status} for ${item.url}`);
-            errors.push({ name: item.name, status: itemRes.status });
+            recordFailure(itemIdx, { status: itemRes.status });
             break;
           }
           if (task.status !== 'processing') return;
@@ -519,7 +557,7 @@ export async function runZipTask(taskId, items, options = {}) {
           if (Number.isFinite(contentLength) && contentLength > 0 && contentLength > maxTotalBytes - task.totalBytes) {
             console.error(`[ZIP] Task ${taskId}: size limit exceeded for ${item.name} (Content-Length ${contentLength} bytes > remaining ${maxTotalBytes - task.totalBytes})`);
             try { await itemRes.body?.cancel(); } catch (e) {}
-            errors.push({ name: item.name, error: 'ZIP_SIZE_LIMIT_EXCEEDED' });
+            recordFailure(itemIdx, { error: 'ZIP_SIZE_LIMIT_EXCEEDED' });
             break;
           }
 
@@ -542,7 +580,7 @@ export async function runZipTask(taskId, items, options = {}) {
               // de forma definitiva (sem retry), mas a tarefa segue com os
               // demais itens e o ZIP finaliza com o que foi concluído.
               if (result.error?.code === 'ZIP_SIZE_LIMIT_EXCEEDED') {
-                errors.push({ name: item.name, error: 'ZIP_SIZE_LIMIT_EXCEEDED' });
+                recordFailure(itemIdx, { error: 'ZIP_SIZE_LIMIT_EXCEEDED' });
                 break;
               }
               console.error(`[ZIP] Task ${taskId}: fetch error for ${item.name}: ${result.error?.message || 'download failed'} (attempt ${attempt + 1}/${MAX_ITEM_RETRIES + 1})`);
@@ -550,7 +588,7 @@ export async function runZipTask(taskId, items, options = {}) {
                 await delay(retryDelayMs * (attempt + 1));
                 continue;
               }
-              errors.push({ name: item.name, error: result.error?.message || 'download failed' });
+              recordFailure(itemIdx, { error: result.error?.message || 'download failed' });
               break;
             }
             archive.append(fs.createReadStream(tmpPath), { name: safeName });
@@ -562,7 +600,7 @@ export async function runZipTask(taskId, items, options = {}) {
             // Corpo sem stream (fallback): o buffer empurraria o total aceito
             // além do limite; o item é descartado e falha sem ser anexado.
             if (task.totalBytes + buffer.length > maxTotalBytes) {
-              errors.push({ name: item.name, error: 'ZIP_SIZE_LIMIT_EXCEEDED' });
+              recordFailure(itemIdx, { error: 'ZIP_SIZE_LIMIT_EXCEEDED' });
               break;
             }
             task.totalBytes += buffer.length;
@@ -570,6 +608,7 @@ export async function runZipTask(taskId, items, options = {}) {
             pendingTmp.push(null);
             console.log(`[ZIP] Task ${taskId}: appended ${item.name} (${(task.currentBytes / 1024 / 1024).toFixed(1)} MB total)`);
           }
+          recordCompleted(itemIdx);
           break;
         } catch (err) {
           // AbortError vem do timeout da tentativa OU do cancelamento da tarefa
@@ -582,7 +621,7 @@ export async function runZipTask(taskId, items, options = {}) {
               await delay(retryDelayMs * (attempt + 1));
               continue;
             }
-            errors.push({ name: item.name, error: `request timed out (${fetchTimeoutMs}ms)` });
+            recordFailure(itemIdx, { error: `request timed out (${fetchTimeoutMs}ms)` });
             break;
           }
           console.error(`[ZIP] Task ${taskId}: fetch error for ${item.name}: ${err.message} (attempt ${attempt + 1}/${MAX_ITEM_RETRIES + 1})`);
@@ -590,7 +629,7 @@ export async function runZipTask(taskId, items, options = {}) {
             await delay(retryDelayMs * (attempt + 1));
             continue;
           }
-          errors.push({ name: item.name, error: err.message });
+          recordFailure(itemIdx, { error: err.message });
           break;
         } finally {
           clearTimeout(timeoutTimer);

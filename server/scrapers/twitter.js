@@ -43,7 +43,13 @@ export async function scrapeTwitter(url) {
       ext: 'mp4',
       label: 'video',
       size: 0,
-      thumbnail: ogImage
+      thumbnail: ogImage,
+      mimeType: 'video/mp4',
+      width: best.width || null,
+      height: best.height || null,
+      quality: best.width && best.height ? `${best.width}x${best.height}` : null,
+      delivery: 'progressive',
+      source: 'twitter'
     });
   }
 
@@ -62,7 +68,10 @@ export async function scrapeTwitter(url) {
         ext: 'mp4',
         label: 'video',
         size: 0,
-        thumbnail: ogImage
+        thumbnail: ogImage,
+        mimeType: 'application/vnd.apple.mpegurl',
+        delivery: 'hls',
+        source: 'twitter'
       });
     }
   }
@@ -121,7 +130,9 @@ export async function scrapeTwitter(url) {
       ext,
       label: 'image',
       size: 0,
-      thumbnail: imgUrl
+      thumbnail: imgUrl,
+      mimeType: ext === 'png' ? 'image/png' : 'image/jpeg',
+      source: 'twitter'
     });
   }
 

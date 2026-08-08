@@ -1,8 +1,8 @@
 import { store } from '../state.js';
-import { formatBytes } from '../utils.js';
 import { t } from '../i18n.js';
 import { getDisplayItems } from './display.js';
 import { vs } from './virtual-scroll.js';
+import { formatMediaSize, formatSizeSummary } from '../media-size.js';
 
 export function updateBatchActionsUI() {
   const batchBtn = document.getElementById('download-selected-btn');
@@ -28,12 +28,10 @@ export function updateBatchActionsUI() {
     if (count === 0) {
       totalSizeEl.textContent = '';
     } else {
-      let totalBytes = 0;
-      for (const id of selectedIds) {
-        const item = store.state.items.find(i => i.id === id);
-        if (item && item.size) totalBytes += item.size;
-      }
-      totalSizeEl.textContent = totalBytes > 0 ? `(${formatBytes(totalBytes)})` : '';
+      const selectedItems = [...selectedIds]
+        .map(id => store.state.items.find(item => item.id === id))
+        .filter(Boolean);
+      totalSizeEl.textContent = `(${formatSizeSummary(selectedItems)})`;
     }
   }
 }
@@ -45,7 +43,7 @@ export function updateCardSize(id, size) {
     card = vs.wrapper.querySelector(selector);
   }
   const sizeEl = card?.querySelector('.card-meta span:last-of-type');
-  if (sizeEl) sizeEl.textContent = formatBytes(size);
+  if (sizeEl) sizeEl.textContent = formatMediaSize(size);
 }
 
 export function updateCardSelection(id, selected) {

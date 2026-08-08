@@ -1,6 +1,9 @@
 import { store } from './state.js';
-import { Toast, formatBytes, formatSpeed, formatDuration, apiFetch, playBeep, sanitizeHtml } from './utils.js';
+import { Toast, apiFetch, playBeep, showSystemNotification } from './utils.js';
 import { t } from './i18n.js';
+import { summarizeMediaSizes } from './media-size.js';
+import { addZipQueueTask, getZipQueueTasks, removeZipQueueTask, updateZipQueueTask } from './zip-queue.js';
+import { openRightPanel } from './right-panel.js';
 
 const activeTasks = new Map();
 const pollingIntervals = new Map();
@@ -19,25 +22,6 @@ const ZIP_TASK_ERROR_KEYS = {
   ZIP_TEMP_STORAGE_FULL: 'zip.error.temp_storage_full',
   ZIP_SIZE_LIMIT_EXCEEDED: 'zip.error.size_limit_exceeded',
 };
-
-// Classe CSS aplicada ao painel conforme o estado da tarefa.
-const ZIP_PANEL_STATUS_CLASS = {
-  queued: 'zip-panel--queued',
-  processing: 'zip-panel--processing',
-  completed: 'zip-panel--completed',
-  cancelled: 'zip-panel--cancelled',
-  error: 'zip-panel--error',
-};
-
-// Troca a classe de status do painel somente quando o estado muda (evita
-// reiniciar animações a cada poll com o mesmo status).
-function setZipPanelStatus(panel, status) {
-  if (!panel || panel.dataset.zipStatus === status) return;
-  Object.values(ZIP_PANEL_STATUS_CLASS).forEach(cls => panel.classList.remove(cls));
-  const cls = ZIP_PANEL_STATUS_CLASS[status];
-  if (cls) panel.classList.add(cls);
-  panel.dataset.zipStatus = status || '';
-}
 
 export async function startZipDownload() {
   const { items, selectedItemIds } = store.state;
@@ -68,7 +52,10 @@ export async function startZipDownload() {
           name: item.name,
           url: item.url,
           ext: item.ext
-        }))
+        })),
+        ignoredItems: selectedItems
+          .filter(item => item.delivery === 'hls' || item.delivery === 'dash')
+          .map(item => ({ name: item.name, ext: item.ext, reason: `unsupported ${item.delivery}` }))
       })
     });
 
@@ -88,62 +75,23 @@ export async function startZipDownload() {
     const finalName = (zipName || 'webscope_media_pack');
     activeTasks.set(taskId, finalName.endsWith('.zip') ? finalName : finalName + '.zip');
 
-    const totalBytes = downloadable.reduce((sum, i) => sum + (i.size || 0), 0);
-    store.state.activeZipTask = { taskId, total: downloadable.length, totalBytes, progress: 0 };
-    updateNavbarZipProgress(0, downloadable.length);
-    renderZipPanel(taskId, downloadable.length, totalBytes, zipName);
+    const { knownBytes: totalBytes, unknownCount } = summarizeMediaSizes(downloadable);
+    store.state.activeZipTask = { taskId, total: downloadable.length, totalBytes, unknownCount, progress: 0 };
+    addZipQueueTask({
+      taskId,
+      name: finalName.endsWith('.zip') ? finalName : `${finalName}.zip`,
+      total: downloadable.length,
+      totalBytes,
+      unknownCount,
+      totalLength: totalBytes,
+      totalLengthKnown: unknownCount === 0,
+    });
+    openRightPanel('downloads');
     startPollingStatus(taskId);
   } catch (err) {
     console.error('ZIP start error:', err);
     Toast.show(err.message || t('toast.zip_error'), 'error');
   }
-}
-
-function renderZipPanel(taskId, totalFiles, totalBytes, zipName) {
-  const panel = document.createElement('div');
-  panel.id = `zip-panel-${taskId}`;
-  panel.className = 'zip-panel zip-panel--queued';
-  panel.dataset.taskId = taskId;
-  if (zipName) panel.dataset.zipName = zipName;
-  panel.dataset.zipStatus = 'queued';
-
-  // Stack panels vertically — offset by existing panels
-  const existing = document.querySelectorAll('.zip-panel:not(.closing)');
-  const offset = existing.length * 175;
-  panel.style.bottom = `${24 + offset}px`;
-
-  panel.innerHTML = `
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <h4 style="font-size:1.1rem; color:var(--text-primary);">${t('zip.title')}</h4>
-      <button class="cancel-zip-btn">&times;</button>
-    </div>
-    <div class="zip-status-text" style="font-size:0.9rem;" data-total-bytes="${totalBytes}">${renderZipStatusText(0, totalFiles, totalBytes)}</div>
-    <div class="zip-progress-wrap">
-      <div class="progress-bar-container">
-        <div class="zip-progress-bar progress-bar-fill" style="width:0%"></div>
-      </div>
-      <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted);">
-        <span class="zip-speed">0 B/s</span>
-        <span class="zip-eta"></span>
-        <span class="zip-processed-bytes">0 B</span>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(panel);
-
-  panel.querySelector('.cancel-zip-btn').addEventListener('click', () => {
-    cancelZipTask(taskId);
-  });
-}
-
-function updateNavbarZipProgress(current, total) {
-  const bar = document.getElementById('zip-navbar-progress');
-  const fill = bar?.querySelector('.zip-navbar-progress-bar');
-  if (!bar || !fill) return;
-  const pct = Math.round((current / (total || 1)) * 100);
-  fill.style.width = `${pct}%`;
-  bar.style.display = pct < 100 ? '' : 'none';
 }
 
 export function startPollingStatus(taskId) {
@@ -154,7 +102,6 @@ export function startPollingStatus(taskId) {
 
       const data = await res.json();
       updateZipPanelUI(taskId, data);
-      updateNavbarZipProgress(data.processed || 0, data.total || 1);
 
       if (data.status === 'completed') {
         clearInterval(interval);
@@ -166,7 +113,6 @@ export function startPollingStatus(taskId) {
         pollingIntervals.delete(taskId);
         activeTasks.delete(taskId);
         store.state.activeZipTask = null;
-        updateNavbarZipProgress(0, 0);
         // task.error traz o código (ex.: ZIP_TEMP_STORAGE_FULL) ou uma mensagem
         // livre; códigos conhecidos são convertidos em chave i18n, o restante
         // usa a própria mensagem do servidor (ou o fallback zip.task_error).
@@ -184,109 +130,52 @@ export function startPollingStatus(taskId) {
   pollingIntervals.set(taskId, interval);
 }
 
-function renderZipStatusText(current, total, totalBytes) {
-  return `${t('zip.progress', { current, total })} (${Math.round((current / (total || 1)) * 100)}%) — ${formatBytes(totalBytes)}`;
-}
-
 export function updateZipPanelUI(taskId, data) {
-  const panel = document.getElementById(`zip-panel-${taskId}`);
-  if (!panel) return;
-
-  setZipPanelStatus(panel, data.status);
-
-  const statusText = panel.querySelector('.zip-status-text');
-  const progressBar = panel.querySelector('.zip-progress-bar');
-  const speedEl = panel.querySelector('.zip-speed');
-  const etaEl = panel.querySelector('.zip-eta');
-  const bytesEl = panel.querySelector('.zip-processed-bytes');
-
-  if (!statusText) return;
-
-  // Tarefa ainda na fila: mostra uma mensagem de espera (com a posição, quando
-  // disponível) e zera o progresso. O polling continua — ao virar 'processing',
-  // a UI volta ao render normal acima.
-  if (data.status === 'queued') {
-    const position = data.queuePosition;
-    statusText.textContent = position != null && position > 0
-      ? t('zip.queued_position', { position })
-      : t('zip.queued_waiting');
-    if (progressBar) progressBar.style.width = '0%';
-    if (speedEl) speedEl.textContent = '';
-    if (etaEl) etaEl.textContent = '';
-    if (bytesEl) bytesEl.textContent = '';
-    return;
-  }
-
-  const current = data.processed || 0;
-  const total = data.total || 1;
-  const percent = Math.round((current / total) * 100);
-  const totalBytes = parseInt(statusText.getAttribute('data-total-bytes') || '0', 10);
-  const speed = data.speed || 0;
-
-  statusText.textContent = renderZipStatusText(current, total, totalBytes);
-  if (progressBar) progressBar.style.width = `${percent}%`;
-  if (speedEl) speedEl.textContent = formatSpeed(speed);
-
-  const remaining = Math.max(0, totalBytes - (data.currentBytes || 0));
-  if (etaEl) {
-    etaEl.textContent = remaining > 0 && speed > 0 ? `~${formatDuration(remaining / speed)}` : '';
-  }
-
-  if (bytesEl) bytesEl.textContent = formatBytes(data.currentBytes || 0);
-}
-
-function onZipCompleted(taskId) {
-  activeTasks.delete(taskId);
-
-  if (store.state.soundEnabled) playBeep();
-  const panel = document.getElementById(`zip-panel-${taskId}`);
-  if (!panel) return;
-  setZipPanelStatus(panel, 'completed');
-
-  const statusText = panel.querySelector('.zip-status-text');
-  const progressWrap = panel.querySelector('.zip-progress-wrap');
-
-  if (statusText) {
-    const totalBytes = parseInt(statusText.getAttribute('data-total-bytes') || '0', 10);
-    statusText.textContent = `${t('zip.download_ready')} — ${formatBytes(totalBytes)}`;
-  }
-
-  if (progressWrap) {
-    const token = localStorage.getItem('downdash_token');
-    let customName = activeTasks.get(taskId) || panel.dataset.zipName || 'webscope_media_pack.zip';
-    if (!customName.endsWith('.zip')) customName += '.zip';
-    const params = new URLSearchParams();
-    if (token) params.set('token', token);
-    params.set('filename', customName);
-    const resultUrl = `/download-zip/result/${taskId}?${params}`;
-    progressWrap.innerHTML = `
-      <a href="${resultUrl}" class="btn btn-primary btn-sm" style="width:100%;" download="${sanitizeHtml(customName)}">
-        ${t('zip.download_btn')}
-      </a>
-    `;
-    progressWrap.querySelector('a').addEventListener('click', () => {
-      setTimeout(() => removeZipPanel(taskId), 2000);
+  const currentTask = getZipQueueTasks().get(taskId);
+  if (currentTask) {
+    updateZipQueueTask(taskId, {
+      state: data.status,
+      processed: data.processed || 0,
+      total: data.total || currentTask.total || 1,
+      currentBytes: data.currentBytes || 0,
+      receivedLength: data.currentBytes || 0,
+      totalLength: currentTask.totalBytes || 0,
+      totalLengthKnown: currentTask.unknownCount === 0,
+      speed: data.speed || 0,
+      queuePosition: data.queuePosition ?? null,
+      errorMsg: data.error || null,
+      report: Array.isArray(data.report) ? data.report : currentTask.report || [],
+      retryOf: data.retryOf || currentTask.retryOf || null,
     });
   }
 }
 
-// Exibe a mensagem de erro no próprio painel (status text + barra zerada) e o
-// mantém visível pelo tempo do toast antes de removê-lo.
-function showZipPanelError(taskId, message) {
-  const panel = document.getElementById(`zip-panel-${taskId}`);
-  if (panel) {
-    const statusText = panel.querySelector('.zip-status-text');
-    if (statusText) statusText.textContent = message;
-    const progressBar = panel.querySelector('.zip-progress-bar');
-    if (progressBar) progressBar.style.width = '0%';
-  }
-  setTimeout(() => removeZipPanel(taskId), 4000);
+function onZipCompleted(taskId) {
+  let customName = activeTasks.get(taskId) || getZipQueueTasks().get(taskId)?.name || 'webscope_media_pack.zip';
+  activeTasks.delete(taskId);
+
+  if (store.state.soundEnabled) playBeep();
+  if (store.state.notificationsEnabled) showSystemNotification(t('zip.download_ready'));
+  if (!customName.endsWith('.zip')) customName += '.zip';
+  const token = localStorage.getItem('downdash_token');
+  const params = new URLSearchParams();
+  if (token) params.set('token', token);
+  params.set('filename', customName);
+  updateZipQueueTask(taskId, {
+    state: 'completed',
+    resultUrl: `/download-zip/result/${taskId}?${params}`,
+    name: customName,
+  });
+
 }
 
-async function cancelZipTask(taskId) {
+function showZipPanelError(taskId, message) {
+  updateZipQueueTask(taskId, { state: 'error', errorMsg: message });
+}
+
+export async function cancelZipTask(taskId) {
   activeTasks.delete(taskId);
   store.state.activeZipTask = null;
-  updateNavbarZipProgress(0, 0);
   const interval = pollingIntervals.get(taskId);
   if (interval) {
     clearInterval(interval);
@@ -295,26 +184,89 @@ async function cancelZipTask(taskId) {
   try {
     await apiFetch(`/download-zip/cancel/${taskId}`);
   } catch (e) {}
-  const panel = document.getElementById(`zip-panel-${taskId}`);
-  if (panel) setZipPanelStatus(panel, 'cancelled');
-  removeZipPanel(taskId);
+  removeZipQueueTask(taskId);
 }
 
-function removeZipPanel(taskId) {
-  const panel = document.getElementById(`zip-panel-${taskId}`);
-  if (!panel) return;
-  panel.classList.add('closing');
-  setTimeout(() => {
-    if (panel.parentNode) panel.remove();
-    restackZipPanels();
-  }, 400);
+export function downloadZipResult(taskId) {
+  const task = getZipQueueTasks().get(taskId);
+  if (!task?.resultUrl || task.downloaded) return false;
+  const anchor = document.createElement('a');
+  anchor.href = task.resultUrl;
+  anchor.download = task.name;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  updateZipQueueTask(taskId, { downloaded: true, finishedAt: Date.now() });
+  return true;
 }
 
-function restackZipPanels() {
-  const panels = document.querySelectorAll('.zip-panel:not(.closing)');
-  panels.forEach((p, i) => {
-    p.style.bottom = `${24 + i * 175}px`;
-  });
+export function dismissZipTask(taskId) {
+  return removeZipQueueTask(taskId);
+}
+
+export async function retryZipFailures(taskId) {
+  const source = getZipQueueTasks().get(taskId);
+  const failedCount = source?.report?.filter(item => item.outcome === 'failed').length || 0;
+  if (!source || failedCount === 0) return false;
+  try {
+    const res = await apiFetch(`/download-zip/retry/${taskId}`, { method: 'POST' });
+    if (!res.ok) throw new Error(t('zip.retry_error'));
+    const data = await res.json();
+    const baseName = source.name.replace(/\.zip$/i, '');
+    const retryName = `${baseName}-retry.zip`;
+    activeTasks.set(data.taskId, retryName);
+    addZipQueueTask({
+      taskId: data.taskId,
+      name: retryName,
+      total: data.total || failedCount,
+      totalBytes: 0,
+      unknownCount: data.total || failedCount,
+      totalLength: 0,
+      totalLengthKnown: false,
+      retryOf: taskId,
+    });
+    openRightPanel('downloads');
+    startPollingStatus(data.taskId);
+    Toast.show(t('zip.retry_started', { count: data.total || failedCount }), 'success');
+    return true;
+  } catch (err) {
+    Toast.show(err.message || t('zip.retry_error'), 'error');
+    return false;
+  }
+}
+
+function reportPayload(task) {
+  const items = Array.isArray(task?.report) ? task.report : [];
+  const counts = { completed: 0, failed: 0, ignored: 0, pending: 0 };
+  items.forEach(item => { counts[item.outcome] = (counts[item.outcome] || 0) + 1; });
+  return { taskId: task.taskId, zipName: task.name, generatedAt: new Date().toISOString(), counts, items };
+}
+
+export function exportZipReport(taskId, format = 'json') {
+  const task = getZipQueueTasks().get(taskId);
+  if (!task?.report?.length) return false;
+  const payload = reportPayload(task);
+  const isText = format === 'text';
+  const content = isText
+    ? [
+        `${t('zip.report_title')}: ${task.name}`,
+        `${t('zip.report_completed')}: ${payload.counts.completed}`,
+        `${t('zip.report_failed')}: ${payload.counts.failed}`,
+        `${t('zip.report_ignored')}: ${payload.counts.ignored}`,
+        '',
+        ...payload.items.map(item => `[${item.outcome.toUpperCase()}] ${item.name}${item.reason ? ` — ${item.reason}` : ''}`),
+      ].join('\n')
+    : JSON.stringify(payload, null, 2);
+  const blobUrl = URL.createObjectURL(new Blob([content], { type: isText ? 'text/plain;charset=utf-8' : 'application/json' }));
+  const anchor = document.createElement('a');
+  anchor.href = blobUrl;
+  anchor.download = `${task.name.replace(/\.zip$/i, '')}-report.${isText ? 'txt' : 'json'}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(blobUrl);
+  return true;
 }
 
 function promptZipName() {
@@ -323,14 +275,14 @@ function promptZipName() {
     overlay.className = 'rename-overlay';
     overlay.innerHTML = `
       <div class="rename-dialog">
-        <label class="rename-label">${t('zip.rename_label')}</label>
+        <label class="rename-label" data-i18n="zip.rename_label">${t('zip.rename_label')}</label>
         <div class="rename-input-group">
           <input class="rename-input" type="text" value="webscope_media_pack" spellcheck="false" autofocus>
           <span class="rename-input-suffix">.zip</span>
         </div>
         <div class="rename-actions">
-          <button class="btn btn-secondary btn-sm rename-cancel">${t('actions.cancel')}</button>
-          <button class="btn btn-primary btn-sm rename-confirm">${t('zip.start')}</button>
+          <button class="btn btn-secondary btn-sm rename-cancel" data-i18n="actions.cancel">${t('actions.cancel')}</button>
+          <button class="btn btn-primary btn-sm rename-confirm" data-i18n="zip.start">${t('zip.start')}</button>
         </div>
       </div>
     `;

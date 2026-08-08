@@ -16,6 +16,7 @@
  * @property {number|null} width - Largura em pixels, se aplicável.
  * @property {number|null} height - Altura em pixels, se aplicável.
  * @property {number|null} duration - Duração em segundos, se aplicável.
+ * @property {string|null} container - Container detectado por leitura parcial, se disponível.
  * @property {string|null} quality - Qualidade/versão (ex.: "1080p").
  * @property {'progressive'|'hls'|'dash'|null} delivery - Forma de entrega
  *   do vídeo (derivada da extensão, a menos que informada explicitamente).
@@ -36,6 +37,7 @@ const OPTIONAL_FIELDS = [
   'width',
   'height',
   'duration',
+  'container',
   'quality',
   'source',
 ];

@@ -8,6 +8,25 @@ import { vsInit, vsCleanup } from './virtual-scroll.js';
 
 const VIRTUAL_SCROLL_THRESHOLD = 200;
 let _animatingOut = false;
+let _renderTimer = null;
+
+function cancelAnimatedRender() {
+  if (_renderTimer) clearTimeout(_renderTimer);
+  _renderTimer = null;
+  _animatingOut = false;
+}
+
+function scheduleAnimatedRender(container) {
+  _animatingOut = true;
+  if (_renderTimer) clearTimeout(_renderTimer);
+  _renderTimer = setTimeout(() => {
+    _renderTimer = null;
+    _animatingOut = false;
+    // O container pode ter sido remontado enquanto a animação ocorria.
+    const currentContainer = document.getElementById('media-container');
+    if (currentContainer && currentContainer === container) doActualRender(container);
+  }, 150);
+}
 
 export function renderMediaContainer() {
   const container = document.getElementById('media-container');
@@ -17,6 +36,7 @@ export function renderMediaContainer() {
   const { items, isAnalyzing } = store.state;
 
   if (isAnalyzing) {
+    cancelAnimatedRender();
     renderSkeletons(container);
     if (countEl) countEl.textContent = t('status.loading');
     return;
@@ -29,6 +49,7 @@ export function renderMediaContainer() {
   }
 
   if (currentFiltered.length === 0) {
+    cancelAnimatedRender();
     container.classList.remove('grid-view', 'list-view', 'compact-view');
     container.innerHTML = `
       <div class="empty-state">
@@ -50,15 +71,16 @@ export function renderMediaContainer() {
     return;
   }
 
-  if (_animatingOut) return;
+  if (_animatingOut) {
+    // Debounce durante a saída: cada mudança reinicia o flush e o render
+    // final sempre lê o estado mais recente de busca/filtro/visualização.
+    scheduleAnimatedRender(container);
+    return;
+  }
   const oldCards = container.querySelectorAll('.media-card');
   if (oldCards.length > 0) {
-    _animatingOut = true;
     oldCards.forEach(c => c.classList.add('card-leave'));
-    setTimeout(() => {
-      _animatingOut = false;
-      doActualRender(container);
-    }, 150);
+    scheduleAnimatedRender(container);
     return;
   }
 

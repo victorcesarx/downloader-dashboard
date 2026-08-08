@@ -1,6 +1,7 @@
 import { store } from '../state.js';
 import { formatBytes } from '../utils.js';
 import { buildCardHtml } from './cards.js';
+import { updateBatchActionsUI } from './batch.js';
 
 const BATCH_SIZE = 20;
 
@@ -57,7 +58,7 @@ export function observeSentinel(container) {
 export function lazySizeFetch(container) {
   const { items } = store.state;
   items.forEach(item => {
-    if (item.size) return;
+    if (Number.isFinite(item.size) && item.size >= 0) return;
     const card = container.querySelector(`.media-card[data-id="${item.id}"]`);
     const sizeEl = card?.querySelector('.card-meta span:last-of-type');
     if (!sizeEl) return;
@@ -83,6 +84,7 @@ export function lazySizeFetch(container) {
           const newItems = [...items];
           newItems[idx] = updated;
           store.state.items = newItems;
+          updateBatchActionsUI();
         }
         sizeEl.textContent = formatBytes(s);
       }

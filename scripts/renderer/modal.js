@@ -80,14 +80,14 @@ export function openPreviewModal(item) {
   } else if (item.type === 'audio') {
     bodyContent = `<audio src="${item.proxyUrl}" controls autoplay style="width:100%; margin:20px 0;"></audio>`;
   } else {
-    bodyContent = `<p>${t('modal.unsupported_preview')}</p>`;
+    bodyContent = `<p data-i18n="modal.unsupported_preview">${t('modal.unsupported_preview')}</p>`;
   }
 
   modal.innerHTML = `
     <div class="modal-content" role="document">
       <div class="modal-header">
         <h3 id="modal-title">${sanitizeHtml(item.name)}</h3>
-        <button class="btn btn-icon close-modal-btn" data-focus-init aria-label="${t('actions.close')}" title="${t('actions.close')}">&times;</button>
+        <button class="btn btn-icon close-modal-btn" data-focus-init data-i18n-aria-label="actions.close" data-i18n-title="actions.close" aria-label="${t('actions.close')}" title="${t('actions.close')}">&times;</button>
       </div>
       <div class="modal-body">
         ${bodyContent}

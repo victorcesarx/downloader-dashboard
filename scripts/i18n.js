@@ -4,6 +4,7 @@
 import { store } from './state.js';
 
 let translations = {};
+const localeListeners = new Set();
 
 export async function loadLocale(lang) {
   try {
@@ -12,7 +13,9 @@ export async function loadLocale(lang) {
     translations = await res.json();
     store.state.lang = lang;
     localStorage.setItem('downdash_lang', lang);
+    document.documentElement.lang = lang;
     translateDOM();
+    localeListeners.forEach(listener => listener(lang));
     return true;
   } catch (err) {
     console.error('Error loading locale:', err);
@@ -21,6 +24,12 @@ export async function loadLocale(lang) {
     }
     return false;
   }
+}
+
+export function onLocaleChange(listener) {
+  if (typeof listener !== 'function') return () => {};
+  localeListeners.add(listener);
+  return () => localeListeners.delete(listener);
 }
 
 export function t(key, params = {}) {

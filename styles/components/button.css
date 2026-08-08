@@ -84,6 +84,7 @@
 .btn-secondary:hover {
   background-color: var(--ds-surface-hover);
   border-color: var(--ds-border-strong);
+  color: var(--ds-text-primary);
 }
 
 /* ============================================================

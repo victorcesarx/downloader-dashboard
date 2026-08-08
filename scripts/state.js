@@ -1,6 +1,9 @@
 /**
  * State Management for Downloader Dashboard
  */
+import { getPreferences, resolvedTheme } from './preferences.js';
+
+const preferences = getPreferences();
 
 const initialState = {
   currentUrl: '',
@@ -8,13 +11,19 @@ const initialState = {
   selectedItemIds: new Set(),
   activeFilter: 'all',
   searchQuery: '',
+  sortOrder: sessionStorage.getItem('downdash_sort') || 'original',
   viewMode: localStorage.getItem('downdash_view') || 'grid',
-  thumbBlurred: localStorage.getItem('downdash_blur') === 'true',
-  theme: localStorage.getItem('downdash_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  lang: localStorage.getItem('downdash_lang') || (navigator.language.startsWith('pt') ? 'pt-BR' : 'en'),
+  thumbBlurred: preferences.thumbBlurred,
+  theme: resolvedTheme(preferences.theme),
+  themePreference: preferences.theme,
+  lang: preferences.lang,
   isAnalyzing: false,
   activeZipTask: null,
-  soundEnabled: localStorage.getItem('downdash_sound') === 'true'
+  soundEnabled: preferences.soundEnabled,
+  notificationsEnabled: preferences.notificationsEnabled,
+  preferredQuality: preferences.preferredQuality,
+  downloadConcurrency: preferences.downloadConcurrency,
+  historyRetention: preferences.historyRetention,
 };
 
 class Store {

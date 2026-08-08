@@ -1,11 +1,13 @@
 import { store } from '../state.js';
-import { formatBytes, estimateFileSize, Toast } from '../utils.js';
+import { Toast } from '../utils.js';
+import { formatMediaSize } from '../media-size.js';
 import { t } from '../i18n.js';
 import { downloadSingleItem } from '../download.js';
 import { openPreviewModal } from './modal.js';
 import { updateBatchActionsUI, updateCardSize } from './batch.js';
 import { renderMediaContainer } from './index.js';
 import { TYPE_ICON_MAP } from './cards.js';
+import { openMediaInspector } from '../media-inspector.js';
 
 // Imagem quebrada (CSP bloqueia `onerror` inline): evento `error` não
 // borbulha — escuta na fase de captura e troca pela thumbnail por um
@@ -44,9 +46,11 @@ export function attachCardEvents(container, useDelegation = false) {
       const db = e.target.closest('.download-btn');
       const pb = e.target.closest('.preview-btn');
       const cb = e.target.closest('.copy-link-btn');
+      const ib = e.target.closest('.inspect-btn');
       if (db) handleDownloadClick(db);
       if (pb) handlePreviewClick(pb);
       if (cb) handleCopyClick(cb);
+      if (ib) handleInspectClick(ib);
     });
     return;
   }
@@ -69,6 +73,15 @@ export function attachCardEvents(container, useDelegation = false) {
   container.querySelectorAll('.copy-link-btn').forEach(btn => {
     btn.addEventListener('click', () => handleCopyClick(btn));
   });
+  container.querySelectorAll('.inspect-btn').forEach(btn => {
+    btn.addEventListener('click', () => handleInspectClick(btn));
+  });
+}
+
+function handleInspectClick(btn) {
+  const id = btn.getAttribute('data-id');
+  const item = store.state.items.find(i => i.id === id);
+  if (item) openMediaInspector(item);
 }
 
 function handleCheckboxChange(cb) {
@@ -161,10 +174,10 @@ function handleQualityChange(sel) {
   updated.selectedQualityIndex = qIdx;
   updated.url = q.url;
   updated.proxyUrl = q.proxyUrl;
-  if (q.size > 0) {
+  if (Number.isFinite(q.size) && q.size >= 0) {
     updated.size = q.size;
   } else {
-    updated.size = estimateFileSize(q.width, q.height);
+    updated.size = null;
     fetch(q.proxyUrl, { headers: { Range: 'bytes=0-0' } }).then(r => {
       const cr = r.headers.get('content-range');
       if (cr) {
@@ -178,6 +191,7 @@ function handleQualityChange(sel) {
             const newItems2 = [...items2];
             newItems2[idx2] = updated2;
             store.state.items = newItems2;
+            updateBatchActionsUI();
           }
           updateCardSize(id, parseInt(m[1], 10));
         }
@@ -189,5 +203,6 @@ function handleQualityChange(sel) {
   store.state.items = newItems;
   const card = document.querySelector(`.media-card[data-id="${id}"]`);
   const sizeEl = card?.querySelector('.card-meta span:last-of-type');
-  if (sizeEl) sizeEl.textContent = formatBytes(updated.size);
+  if (sizeEl) sizeEl.textContent = formatMediaSize(updated.size);
+  updateBatchActionsUI();
 }

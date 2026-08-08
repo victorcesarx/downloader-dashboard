@@ -1,9 +1,78 @@
-import { Toast, formatBytes, formatSpeed, apiFetch, playBeep, sanitizeHtml, ensureFileExtension, extensionFromMime } from './utils.js';
-import { t } from './i18n.js';
+import { Toast, formatBytes, formatSpeed, apiFetch, playBeep, showSystemNotification, sanitizeHtml, ensureFileExtension, extensionFromMime } from './utils.js';
+import { onLocaleChange, t } from './i18n.js';
 import { store } from './state.js';
+import { updateBatchActionsUI, updateCardSize } from './renderer/batch.js';
+import { openRightPanel } from './right-panel.js';
 
 const activeDownloads = new Map();
+const HISTORY_STORAGE_KEY = 'webscope_download_history_v1';
+export const DOWNLOAD_HISTORY_LIMIT = 50;
+export const DOWNLOAD_MAX_ATTEMPTS = 3;
+export const DOWNLOAD_RETRY_BASE_MS = 500;
 let _onChange = null;
+let runningSlots = 0;
+
+function historyLimit() {
+  return Math.min(100, Math.max(10, Number(store.state.historyRetention) || DOWNLOAD_HISTORY_LIMIT));
+}
+
+function historySnapshot(ad) {
+  return {
+    item: ad.item,
+    state: ad.state,
+    _done: true,
+    receivedLength: ad.receivedLength || 0,
+    totalLength: ad.totalLength || 0,
+    totalLengthKnown: ad.totalLengthKnown === true,
+    startTime: ad.startTime || null,
+    finishedAt: ad.finishedAt || Date.now(),
+    errorMsg: ad.errorMsg || null,
+    shortMsg: ad.shortMsg || null,
+    speed: 0,
+    paused: false,
+  };
+}
+
+function persistHistory() {
+  try {
+    const records = [...activeDownloads.values()]
+      .filter(ad => ad._done)
+      .sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0))
+      .slice(0, historyLimit())
+      .map(historySnapshot);
+    sessionStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(records));
+  } catch { /* sessionStorage indisponível ou item não serializável */ }
+}
+
+function hydrateHistory() {
+  try {
+    const records = JSON.parse(sessionStorage.getItem(HISTORY_STORAGE_KEY) || '[]');
+    if (!Array.isArray(records)) return;
+    for (const record of records.slice(0, historyLimit())) {
+      if (!record?.item?.id || !['completed', 'error'].includes(record.state)) continue;
+      activeDownloads.set(record.item.id, {
+        ...record,
+        totalLengthKnown: record.totalLengthKnown === true,
+        stateEl: null, cardEl: null, controller: null,
+      });
+    }
+  } catch { /* histórico inválido é ignorado */ }
+}
+
+function pruneHistory() {
+  const terminal = [...activeDownloads.values()]
+    .filter(ad => ad._done)
+    .sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
+  for (const ad of terminal.slice(historyLimit())) activeDownloads.delete(ad.item.id);
+  persistHistory();
+}
+
+hydrateHistory();
+
+onLocaleChange(() => {
+  for (const ad of activeDownloads.values()) renderState(ad, ad.state);
+  notifyChange();
+});
 
 export function setOnChange(cb) {
   _onChange = cb;
@@ -15,6 +84,17 @@ export function getActiveDownloads() {
 
 export function dismissDownload(ad) {
   cleanup(ad);
+}
+
+export function restartDownload(ad) {
+  if (!ad) return;
+  const { item, cardEl } = ad;
+  cleanup(ad);
+  downloadFile(item, cardEl);
+}
+
+export function cancelActiveDownload(ad) {
+  cancelDownload(ad);
 }
 
 function notifyChange() {
@@ -62,16 +142,22 @@ function downloadingHTML(ad, paused = false) {
   const bytes = ad.totalLength > 0
     ? `${formatBytes(ad.receivedLength)} / ${formatBytes(ad.totalLength)}`
     : formatBytes(ad.receivedLength);
-  const speed = paused ? t('dl.paused_at', { pct }) : formatSpeed(ad.speed);
+  const speed = ad.waitingRetry
+    ? t('dl.retrying', { attempt: ad.attempt + 1, max: DOWNLOAD_MAX_ATTEMPTS })
+    : paused ? t('dl.paused_at', { pct }) : formatSpeed(ad.speed);
   const pauseLabel = paused ? `▶ ${t('dl.resume')}` : `⏸ ${t('dl.pause')}`;
   return `
     ${progressBarHtml(width)}
     ${infoLineHtml(speed, `${bytes} · ${pct}%`)}
     ${controlsRowHtml(`
-      ${stateBtnHtml('secondary', pauseLabel, 'data-action="pause"')}
+      ${ad.waitingRetry ? '' : stateBtnHtml('secondary', pauseLabel, 'data-action="pause"')}
       ${stateBtnHtml('secondary', `✕ ${t('dl.cancel')}`, 'data-action="cancel"')}
     `)}
   `;
+}
+
+function queuedHTML(ad) {
+  return `${progressBarHtml(0)}${infoLineHtml(t('dl.queued'), t('dl.attempt', { attempt: ad.attempt, max: DOWNLOAD_MAX_ATTEMPTS }))}${controlsRowHtml(stateBtnHtml('secondary', `✕ ${t('dl.cancel')}`, 'data-action="cancel"'))}`;
 }
 
 function completeHTML() {
@@ -109,6 +195,12 @@ function renderState(ad, state) {
     const paused = state === 'paused';
     el.innerHTML = downloadingHTML(ad, paused);
     el.querySelector('[data-action="pause"]')?.addEventListener('click', () => togglePause(ad));
+    el.querySelector('[data-action="cancel"]')?.addEventListener('click', () => cancelDownload(ad));
+    return;
+  }
+
+  if (state === 'queued') {
+    el.innerHTML = queuedHTML(ad);
     el.querySelector('[data-action="cancel"]')?.addEventListener('click', () => cancelDownload(ad));
     return;
   }
@@ -155,7 +247,7 @@ function captureIdleHtml(stateEl) {
 export function restoreDownloadState(item, cardEl) {
   if (!item || !cardEl) return false;
   const ad = activeDownloads.get(item.id);
-  if (!ad) return false;
+  if (!ad || ad._done) return false;
 
   const stateEl = cardEl.querySelector('.card-state');
   if (!stateEl) return false;
@@ -167,13 +259,14 @@ export function restoreDownloadState(item, cardEl) {
 }
 
 export function downloadFile(item, cardEl) {
-  if (activeDownloads.has(item.id)) {
+  const existing = activeDownloads.get(item.id);
+  if (existing && !existing._done) {
     Toast.show(t('toast.download_in_progress'), 'warning');
     return;
   }
+  if (existing) cleanup(existing);
 
-  const stateEl = cardEl.querySelector('.card-state');
-  if (!stateEl) return;
+  const stateEl = cardEl?.querySelector('.card-state') || null;
 
   const controller = new AbortController();
   const ad = {
@@ -186,27 +279,66 @@ export function downloadFile(item, cardEl) {
     speed: 0, speedInterval: null,
     idleHtml: captureIdleHtml(stateEl),
     state: 'idle',
+    attempt: 1,
+    waitingRetry: false,
+    retryTimer: null,
     _done: false
   };
 
   activeDownloads.set(item.id, ad);
   notifyChange();
+  openRightPanel('downloads');
 
+  if (runningSlots < (store.state.downloadConcurrency || 3)) beginDownload(ad);
+  else renderState(ad, 'queued');
+}
+
+function beginDownload(ad) {
+  if (!ad || ad._done || ad._cleanedUp || ad.runningSlot) return;
+  ad.runningSlot = true;
+  runningSlots += 1;
   renderState(ad, 'downloading');
   startSpeedTimer(ad);
+  notifyChange();
   executeDownload(ad);
+}
+
+function releaseSlot(ad) {
+  if (!ad?.runningSlot) return;
+  ad.runningSlot = false;
+  runningSlots = Math.max(0, runningSlots - 1);
+  pumpDownloadQueue();
+}
+
+function pumpDownloadQueue() {
+  const limit = store.state.downloadConcurrency || 3;
+  for (const ad of activeDownloads.values()) {
+    if (runningSlots >= limit) break;
+    if (!ad._done && ad.state === 'queued') beginDownload(ad);
+  }
 }
 
 async function executeDownload(ad) {
   if (!ad || ad._done) return;
 
   try {
+    if (ad.item.delivery === 'hls' || ad.item.delivery === 'dash') {
+      const formatError = new Error(t('toast.streaming_unsupported'));
+      formatError.code = 'UNSUPPORTED_FORMAT';
+      throw formatError;
+    }
     const res = await apiFetch(ad.item.proxyUrl, { signal: ad.controller.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const httpError = new Error(`HTTP ${res.status}`);
+      httpError.status = res.status;
+      throw httpError;
+    }
 
     ad.contentType = res.headers.get('content-type') || null;
     const contentLength = res.headers.get('content-length');
-    ad.totalLength = contentLength ? parseInt(contentLength) : 0;
+    ad.totalLengthKnown = contentLength !== null && Number.isFinite(parseInt(contentLength, 10));
+    ad.totalLength = ad.totalLengthKnown ? parseInt(contentLength, 10) : 0;
+    if (ad.totalLengthKnown) updateKnownItemSize(ad, ad.totalLength);
 
     const reader = res.body.getReader();
 
@@ -231,21 +363,63 @@ async function executeDownload(ad) {
     finishDownload(ad);
   } catch (err) {
     if (err.name === 'AbortError') return cleanup(ad);
-    onError(ad, err);
+    if (shouldRetry(ad, err)) scheduleRetry(ad, err);
+    else onError(ad, err);
   }
+}
+
+function shouldRetry(ad, err) {
+  if (!ad || ad._done || ad.attempt >= DOWNLOAD_MAX_ATTEMPTS) return false;
+  if ([400, 401, 403, 404, 405, 410, 415, 422].includes(err?.status)) return false;
+  if (err?.code === 'UNSUPPORTED_FORMAT') return false;
+  return true;
+}
+
+function scheduleRetry(ad, err) {
+  if (!ad || ad._done) return;
+  ad.errorMsg = String(err?.message || err);
+  ad.waitingRetry = true;
+  ad.state = 'downloading';
+  const delay = DOWNLOAD_RETRY_BASE_MS * (2 ** (ad.attempt - 1)) + Math.floor(Math.random() * 250);
+  ad.nextRetryAt = Date.now() + delay;
+  renderState(ad, 'downloading');
+  notifyChange();
+  ad.retryTimer = setTimeout(() => {
+    if (ad._done || ad._cleanedUp) return;
+    ad.retryTimer = null;
+    ad.waitingRetry = false;
+    ad.attempt += 1;
+    ad.controller = new AbortController();
+    ad.chunks = [];
+    ad.receivedLength = 0;
+    ad.totalLength = 0;
+    ad.totalLengthKnown = false;
+    ad.lastCheckBytes = 0;
+    ad.lastCheckTime = Date.now();
+    renderState(ad, 'downloading');
+    notifyChange();
+    executeDownload(ad);
+  }, delay);
 }
 
 function finishDownload(ad) {
   if (!ad || ad._done) return;
   ad._done = true;
+  ad.finishedAt = Date.now();
 
   if (store.state.soundEnabled) playBeep();
+  if (store.state.notificationsEnabled) showSystemNotification(t('dl.complete'), ad.item.name);
 
   const blob = new Blob(ad.chunks);
+  if (!ad.totalLengthKnown) {
+    ad.totalLength = blob.size;
+    ad.totalLengthKnown = true;
+    updateKnownItemSize(ad, blob.size);
+  }
   const blobUrl = URL.createObjectURL(blob);
   const fileName = ensureFileExtension(
     ad.item.name,
-    ad.item.ext || extensionFromMime(ad.contentType) || 'bin'
+    extensionFromMime(ad.contentType) || ad.item.ext || 'bin'
   );
   ad.blobUrl = blobUrl;
 
@@ -258,7 +432,11 @@ function finishDownload(ad) {
   URL.revokeObjectURL(blobUrl);
 
   renderState(ad, 'completed');
-  setTimeout(() => cleanup(ad), 2500);
+  stopTimer(ad);
+  releaseSlot(ad);
+  pruneHistory();
+  notifyChange();
+  setTimeout(() => restoreCardIdle(ad), 2500);
 }
 
 function startSpeedTimer(ad) {
@@ -316,28 +494,30 @@ function togglePause(ad) {
 
 function cancelDownload(ad) {
   if (!ad || ad._done) return;
-  ad.controller.abort();
+  if (ad.retryTimer) {
+    clearTimeout(ad.retryTimer);
+    ad.retryTimer = null;
+  }
+  ad.controller?.abort();
   cleanup(ad);
 }
 
 function onError(ad, err) {
   if (!ad || ad._done) return;
   ad._done = true;
+  ad.finishedAt = Date.now();
   ad.errorMsg = String(err && err.message ? err.message : err);
   ad.shortMsg = t('dl.error');
   Toast.show(`${t('dl.error')}: ${ad.errorMsg}`, 'error');
   stopTimer(ad);
+  releaseSlot(ad);
   renderState(ad, 'error');
+  pruneHistory();
+  notifyChange();
 }
 
 function retryDownload(ad) {
-  if (!ad) return;
-  const item = ad.item;
-  const cardEl = ad.cardEl;
-  stopTimer(ad);
-  ad._cleanedUp = true;
-  activeDownloads.delete(item.id);
-  downloadFile(item, cardEl);
+  restartDownload(ad);
 }
 
 function stopTimer(ad) {
@@ -347,11 +527,29 @@ function stopTimer(ad) {
   }
 }
 
+function updateKnownItemSize(ad, size) {
+  if (!ad?.item || !Number.isFinite(size) || size < 0) return;
+  ad.item.size = size;
+  const index = store.state.items.findIndex(item => String(item.id) === String(ad.item.id));
+  if (index !== -1) {
+    const items = [...store.state.items];
+    items[index] = { ...items[index], size };
+    ad.item = items[index];
+    store.state.items = items;
+  }
+  updateCardSize(ad.item.id, size);
+  updateBatchActionsUI();
+}
+
 function cleanup(ad) {
   if (!ad || ad._cleanedUp) return;
   ad._cleanedUp = true;
+  if (ad.retryTimer) clearTimeout(ad.retryTimer);
+  ad.retryTimer = null;
   stopTimer(ad);
+  releaseSlot(ad);
   activeDownloads.delete(ad.item.id);
+  persistHistory();
   notifyChange();
   if (ad.blobUrl) URL.revokeObjectURL(ad.blobUrl);
   const el = ad.stateEl;
@@ -359,4 +557,18 @@ function cleanup(ad) {
     el.dataset.state = 'idle';
     if (ad.idleHtml) el.innerHTML = ad.idleHtml;
   }
+}
+
+store.subscribe((property) => {
+  if (property === 'downloadConcurrency') pumpDownloadQueue();
+  if (property === 'historyRetention') pruneHistory();
+});
+
+function restoreCardIdle(ad) {
+  const el = ad?.stateEl;
+  if (!el || activeDownloads.get(ad.item.id) !== ad) return;
+  el.dataset.state = 'idle';
+  if (ad.idleHtml) el.innerHTML = ad.idleHtml;
+  ad.stateEl = null;
+  ad.cardEl = null;
 }

@@ -1,1 +1,1 @@
-(function(){var t=localStorage.getItem('downdash_theme');if(!t)t=(window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);})();
+(function(){var p;try{p=JSON.parse(localStorage.getItem('webscope_preferences_v1')||'null')}catch(e){}var t=(p&&p.theme)||localStorage.getItem('downdash_theme')||'system';if(t==='system')t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t);})();

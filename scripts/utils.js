@@ -56,6 +56,12 @@ const MIME_EXTENSIONS = {
   'image/webp': 'webp',
   'image/gif': 'gif',
   'image/avif': 'avif',
+  'image/bmp': 'bmp',
+  'image/tiff': 'tiff',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+  'image/x-icon': 'ico',
+  'image/vnd.microsoft.icon': 'ico',
   'image/svg+xml': 'svg',
   'video/mp4': 'mp4',
   'video/webm': 'webm',
@@ -89,10 +95,26 @@ export function extensionFromMime(mime) {
 }
 
 // Se o nome não terminar em extensão, acrescenta uma (sem modificar impossível).
+const KNOWN_FILE_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'ico', 'svg',
+  'mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac',
+  'pdf', 'zip', 'rar', '7z', 'tar', 'gz', 'txt', 'csv', 'json', 'xml', 'doc', 'docx', 'xls', 'xlsx',
+  'ppt', 'pptx', 'html', 'htm', 'm3u8', 'mpd', 'bin',
+]);
+
+const EQUIVALENT_EXTENSIONS = {
+  jpeg: 'jpg', jpg: 'jpg', tif: 'tiff', tiff: 'tiff', htm: 'html', html: 'html',
+};
+
 export function ensureFileExtension(name, ext) {
   const base = (name || 'download').trim();
-  if (/\.[a-z0-9]{2,8}$/i.test(base)) return base;
-  const cleanExt = String(ext || '').replace(/^\./, '');
+  const cleanExt = String(ext || '').replace(/^\./, '').toLowerCase();
+  const currentExt = base.match(/\.([a-z0-9]{2,8})$/i)?.[1]?.toLowerCase() || null;
+  if (currentExt) {
+    const normalizedCurrent = EQUIVALENT_EXTENSIONS[currentExt] || currentExt;
+    const normalizedWanted = EQUIVALENT_EXTENSIONS[cleanExt] || cleanExt;
+    if (normalizedCurrent === normalizedWanted || KNOWN_FILE_EXTENSIONS.has(currentExt)) return base;
+  }
   return cleanExt ? `${base}.${cleanExt}` : base;
 }
 
@@ -120,6 +142,14 @@ export function playBeep() {
     osc.stop(ctx.currentTime + 0.25);
     osc.onended = () => ctx.close();
   } catch (_) {}
+}
+
+export function showSystemNotification(title, body = '') {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+    new Notification(title, { body, icon: '/favicon.ico' });
+    return true;
+  } catch { return false; }
 }
 
 export class Toast {

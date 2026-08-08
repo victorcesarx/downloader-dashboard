@@ -16,8 +16,12 @@ export const MIME_TYPES = {
 
 export const CACHE_DURATIONS = {
   '.html': 'no-cache',
-  '.css': 'max-age=3600',
-  '.js': 'max-age=3600',
+  // Sem nomes com hash, CSS e JS precisam ser revalidados para evitar que
+  // estrutura e comportamento pertençam a versões diferentes do app.
+  '.css': 'no-cache',
+  // Os módulos ainda não possuem nomes com hash. Exigir revalidação evita
+  // que uma reinicialização continue executando uma versão anterior do app.
+  '.js': 'no-cache',
   '.json': 'no-cache',
   '.png': 'max-age=86400',
   '.jpg': 'max-age=86400',

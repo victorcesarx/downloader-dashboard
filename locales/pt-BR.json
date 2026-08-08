@@ -6,6 +6,8 @@
   },
   "common": {
     "na": "N/A",
+    "unknown": "Desconhecido",
+    "known_plus_unknown": "{size} + {count} desconhecido(s)",
     "media_fallback": "Mídia {n}"
   },
   "badge": {
@@ -27,27 +29,106 @@
     "analyzing": "Analisando...",
     "drop_here": "Solte a URL aqui"
   },
+  "history": {
+    "title": "URLs recentes",
+    "clear": "Limpar",
+    "empty": "Nenhuma URL recente",
+    "pin": "Fixar",
+    "unpin": "Desafixar",
+    "remove": "Remover"
+  },
+  "preferences": {
+    "title": "Preferências",
+    "subtitle": "Configurações do WebScope",
+    "appearance": "Aparência",
+    "theme": "Tema",
+    "theme_system": "Sistema",
+    "theme_dark": "Escuro",
+    "theme_light": "Claro",
+    "language": "Idioma",
+    "nsfw": "Desfocar conteúdo NSFW",
+    "nsfw_hint": "Aplicado às miniaturas",
+    "downloads": "Downloads",
+    "sound": "Som ao concluir",
+    "sound_hint": "Avisa quando o arquivo terminar",
+    "notifications": "Notificações do sistema",
+    "notifications_hint": "Mostra um aviso fora da aba",
+    "quality": "Qualidade preferida",
+    "quality_best": "Melhor disponível",
+    "concurrency": "Downloads simultâneos",
+    "concurrency_hint": "Limita o uso da conexão",
+    "history": "Histórico",
+    "retention": "Registros mantidos",
+    "retention_hint": "Concluídos e falhas da sessão",
+    "reset": "Restaurar padrões",
+    "autosave": "Alterações salvas automaticamente"
+  },
   "filters": {
     "all": "Todos",
     "video": "Vídeos",
     "image": "Imagens",
     "audio": "Áudios",
-    "document": "Documentos"
+    "document": "Documentos",
+    "search_input": "Buscar mídias..."
+  },
+  "sort": {
+    "label": "Ordenar mídias",
+    "original": "Original",
+    "name_asc": "Nome A–Z",
+    "name_desc": "Nome Z–A",
+    "size_desc": "Maior tamanho",
+    "size_asc": "Menor tamanho",
+    "quality_desc": "Maior qualidade",
+    "quality_asc": "Menor qualidade",
+    "type": "Por tipo"
   },
   "actions": {
     "select_all": "Selecionar Todos",
     "deselect_all": "Desmarcar Todos",
     "download_selected": "Baixar Selecionados (ZIP)",
     "download": "Download",
+    "select": "Selecionar",
+    "deselect": "Desmarcar",
     "select_variant": "Selecionar variante",
     "sound": "Som ao concluir",
     "preview": "Visualizar",
     "cancel": "Cancelar",
     "close": "Fechar",
     "copy_link": "Copiar Link",
+    "inspect": "Inspecionar mídia",
+    "details": "Detalhes",
+    "open_original": "Abrir original",
     "nsfw_title": "Alternar desfoque NSFW",
     "toggle_select": "Selecionar ou desmarcar todas as mídias filtradas",
     "clear_cache": "Limpar cache de pesquisa"
+  },
+  "inspector": {
+    "title": "Detalhes da mídia",
+    "file_details": "Detalhes do arquivo",
+    "source_details": "Origem e confiança",
+    "type": "Tipo",
+    "type_video": "Vídeo",
+    "type_image": "Imagem",
+    "type_audio": "Áudio",
+    "type_document": "Documento",
+    "size": "Tamanho",
+    "resolution": "Resolução",
+    "duration": "Duração",
+    "quality": "Qualidade",
+    "delivery": "Entrega",
+    "source": "Origem",
+    "confidence": "Confiança",
+    "confidence_reasons": "Evidências",
+    "url": "URL direta",
+    "copied": "Copiado!",
+    "source_unavailable": "Dados de origem indisponíveis para esta mídia."
+    ,"variants": "Variantes disponíveis"
+    ,"aspect_ratio": "Proporção"
+    ,"container": "Container"
+    ,"refresh": "Atualizar metadados"
+    ,"probing": "Consultando…"
+    ,"copy_json": "Copiar JSON"
+    ,"probe_failed": "Não foi possível atualizar os metadados."
   },
   "views": {
     "grid": "Grade",
@@ -78,6 +159,19 @@
     "task_error": "Task cancelada ou com erro",
     "rename_label": "Nomeie seu arquivo ZIP",
     "start": "Iniciar ZIP",
+    "report_title": "Relatório do ZIP",
+    "report_summary": "Relatório: {completed} concluído(s), {failed} falho(s), {ignored} ignorado(s)",
+    "report_completed": "Concluído",
+    "report_failed": "Falhou",
+    "report_ignored": "Ignorado",
+    "report_pending": "Pendente",
+    "retry_failed": "Tentar falhas ({count})",
+    "retry_started": "Nova tarefa criada para {count} arquivo(s) com falha.",
+    "retry_error": "Não foi possível tentar novamente os arquivos com falha.",
+    "export_json": "Exportar JSON",
+    "export_text": "Exportar texto",
+    "reason_unsupported_hls": "Streaming HLS não é suportado em ZIP",
+    "reason_unsupported_dash": "Streaming DASH não é suportado em ZIP",
     "error": {
       "queue_full": "A fila de downloads está cheia. Tente novamente mais tarde.",
       "ip_limit": "Você já possui muitas tarefas ZIP em andamento.",
@@ -96,14 +190,21 @@
     "complete": "Download concluído!",
     "error": "Erro no download",
     "downloading": "Baixando",
+    "queued": "Aguardando vaga",
     "paused": "Pausado",
     "paused_at": "Pausado — {pct}%",
     "retry": "Tentar novamente",
+    "retrying": "Nova tentativa {attempt}/{max} em instantes",
+    "retry_wait": "Aguardando nova tentativa",
+    "attempt": "Tentativa {attempt}/{max}",
     "done": "Concluir"
   },
   "queue": {
     "empty": "Nenhum download em andamento",
     "clear_done": "Limpar concluídos",
+    "clear_failed": "Limpar falhas",
+    "download_again": "Baixar novamente",
+    "remove": "Remover",
     "active_one": "{count} download ativo",
     "active_other": "{count} downloads ativos",
     "tab_active": "Ativos",

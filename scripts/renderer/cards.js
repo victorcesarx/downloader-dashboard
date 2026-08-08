@@ -47,11 +47,11 @@ function variantSelectHtml(item) {
 }
 
 export function buildCardHtml(item, isSelected, typeIconMap = TYPE_ICON_MAP) {
-  let previewContent = `<div class="media-placeholder-icon">${typeIconMap[item.type] || '📄'}</div>`;
+let previewContent = `<div class="media-placeholder-icon">${typeIconMap[item.type] || '📄'}</div>`;
   if (item.type === 'image') {
-    previewContent = `<img src="${item.proxyUrl}" alt="${sanitizeHtml(item.name)}" loading="lazy" onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'media-placeholder-icon\\'>🖼️</div>';" />`;
+    previewContent = `<img class="card-media-img" src="${item.proxyUrl}" alt="${sanitizeHtml(item.name)}" loading="lazy" />`;
   } else if (item.thumbnail) {
-    previewContent = `<img src="${item.thumbnail}" alt="${sanitizeHtml(item.name)}" loading="lazy" onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'media-placeholder-icon\\'>${typeIconMap[item.type] || '📄'}</div>';" />`;
+    previewContent = `<img class="card-media-img" src="${item.thumbnail}" alt="${sanitizeHtml(item.name)}" loading="lazy" />`;
   }
 
   return `
@@ -75,7 +75,7 @@ export function buildCardHtml(item, isSelected, typeIconMap = TYPE_ICON_MAP) {
           ` : ''}
           ${variantSelectHtml(item)}
         </div>
-        <div class="card-actions">
+        <div class="card-actions card-state" data-state="idle">
           <button class="btn btn-secondary btn-sm copy-link-btn" data-id="${item.id}" title="${t('actions.copy_link')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
           ${(item.type === 'video' || item.type === 'image' || item.type === 'audio') ? `
             <button class="btn btn-secondary btn-sm preview-btn" data-id="${item.id}" title="${t('actions.preview')}">${t('actions.preview')}</button>

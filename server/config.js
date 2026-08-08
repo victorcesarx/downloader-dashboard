@@ -76,13 +76,3 @@ try {
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
-
-export const PRIVATE_IPV4 = [
-  { addr: '10.', mask: 8 },
-  { addr: '127.', mask: 8 },
-  { addr: '169.254.', mask: 16 },
-  { addr: '172.16.', mask: 12 },
-  { addr: '192.168.', mask: 16 },
-  { addr: '0.', mask: 8 },
-  { addr: '100.64.', mask: 10 },
-];

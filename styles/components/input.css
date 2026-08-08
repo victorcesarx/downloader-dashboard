@@ -1,0 +1,72 @@
+/* ============================================================
+   WebScope Components · Input
+   Campo de entrada de texto reutilizável.
+
+   Perfil: compacto · sem glow · sem gradiente.
+
+   Estados: focus · disabled · placeholder
+
+   Usa exclusivamente Design Tokens (styles/design-tokens.css).
+   ============================================================ */
+
+/* ============================================================
+   BASE · .ds-input
+   Campo compacto com superfície fosca e borda sutil.
+   ============================================================ */
+
+.ds-input {
+  /* Ocupa a largura do container */
+  width: 100%;
+
+  /* Tipografia compacta */
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-font-size-sm);
+  font-weight: var(--ds-font-weight-regular);
+  line-height: 1.5;
+  color: var(--ds-text-primary);
+
+  /* Superfície sem gradiente nem glow */
+  background-color: var(--ds-bg-alt);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-sm);
+
+  /* Compacto */
+  padding: var(--ds-space-8) var(--ds-space-12);
+
+  /* Movimento em micro-transições */
+  transition:
+    border-color var(--ds-transition-fast),
+    box-shadow var(--ds-transition-fast);
+}
+
+/* ============================================================
+   ESTADO · ::placeholder
+   Dica de preenchimento em baixa ênfase.
+   ============================================================ */
+
+.ds-input::placeholder {
+  color: var(--ds-text-muted);
+}
+
+/* ============================================================
+   ESTADO · :focus
+   Borda primária + anel de foco sutil (sem glow forte).
+   ============================================================ */
+
+.ds-input:focus {
+  outline: none;
+  border-color: var(--ds-primary);
+  box-shadow: var(--ds-ring);
+}
+
+/* ============================================================
+   ESTADO · :disabled
+   Campo bloqueado — atenua texto e fundo, sem interação.
+   ============================================================ */
+
+.ds-input:disabled {
+  background-color: var(--ds-bg);
+  color: var(--ds-text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}

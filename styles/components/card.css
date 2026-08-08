@@ -1,0 +1,65 @@
+/* ============================================================
+   WebScope Components · Card
+   Superfície de conteúdo agrupável.
+
+   Estados: default · :hover · .is-selected · .is-disabled
+
+   Usa exclusivamente Design Tokens (styles/design-tokens.css).
+   ============================================================ */
+
+/* ============================================================
+   BASE · .ds-card
+   Superfície elevada com borda sutil e sombra leve.
+   ============================================================ */
+
+.ds-card {
+  /* Tipografia herdada do sistema */
+  font-family: var(--ds-font-sans);
+  color: var(--ds-text-primary);
+
+  /* Elevação visual */
+  background-color: var(--ds-surface);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-md);
+  box-shadow: var(--ds-shadow-surface);
+
+  /* Espaçamento interno */
+  padding: var(--ds-space-16);
+
+  /* Movimento em micro-transições */
+  transition:
+    background-color var(--ds-transition-fast),
+    border-color var(--ds-transition-fast),
+    box-shadow var(--ds-transition-fast);
+}
+
+/* ============================================================
+   ESTADO · :hover
+   Eleva levemente a superfície ao interagir.
+   ============================================================ */
+
+.ds-card:hover {
+  background-color: var(--ds-surface-hover);
+  border-color: var(--ds-border-strong);
+  box-shadow: var(--ds-shadow-overlay);
+}
+
+/* ============================================================
+   ESTADO · .is-selected
+   Card escolhido — borda/anil de foco da cor primária.
+   ============================================================ */
+
+.ds-card.is-selected {
+  border-color: var(--ds-primary);
+  box-shadow: var(--ds-ring);
+}
+
+/* ============================================================
+   ESTADO · .is-disabled
+   Card indisponível — atenua e bloqueia interação.
+   ============================================================ */
+
+.ds-card.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}

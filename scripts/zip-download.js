@@ -117,7 +117,7 @@ function renderZipPanel(taskId, totalFiles, totalBytes, zipName) {
       <h4 style="font-size:1.1rem; color:var(--text-primary);">${t('zip.title')}</h4>
       <button class="cancel-zip-btn">&times;</button>
     </div>
-    <div class="zip-status-text" style="font-size:0.9rem; color:var(--text-secondary);" data-total-bytes="${totalBytes}">${renderZipStatusText(0, totalFiles, totalBytes)}</div>
+    <div class="zip-status-text" style="font-size:0.9rem;" data-total-bytes="${totalBytes}">${renderZipStatusText(0, totalFiles, totalBytes)}</div>
     <div class="zip-progress-wrap">
       <div class="progress-bar-container">
         <div class="zip-progress-bar progress-bar-fill" style="width:0%"></div>

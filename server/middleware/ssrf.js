@@ -1,6 +1,5 @@
 import net from 'net';
 import dns from 'dns';
-import { PRIVATE_IPV4 } from '../config.js';
 
 function ipv4ToNum(ip) {
   const parts = ip.split('.');

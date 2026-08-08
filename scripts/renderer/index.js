@@ -41,7 +41,8 @@ export function renderMediaContainer() {
           </svg>
         </div>
         <h3>${items.length === 0 ? t('status.empty') : t('status.filter_empty')}</h3>
-        ${items.length > 0 ? `<button class="btn btn-secondary btn-sm" style="margin-top:16px" onclick="window.__clearFilters()">${t('status.clear_filters')}</button>` : ''}
+        ${items.length === 0 ? `<p class="empty-state-description">${t('status.empty_hint')}</p>` : ''}
+        ${items.length > 0 ? `<button class="btn btn-secondary btn-sm filter-clear-btn" style="margin-top:16px">${t('status.clear_filters')}</button>` : ''}
       </div>
     `;
     resetLazyState();
@@ -99,7 +100,9 @@ function doActualRender(container) {
   // Lazy size fetch
   requestAnimationFrame(() => lazySizeFetch(container));
 
-  attachCardEvents(container, false);
+  // Delegação no container: cards de batches seguintes (lazy) e do virtual
+  // scroll herdaram os mesmos handlers via event bubbling.
+  attachCardEvents(container, true);
 }
 
 export { renderSkeletons } from './skeleton.js';

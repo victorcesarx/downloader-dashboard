@@ -1,7 +1,6 @@
 {
   "app": {
     "title": "WebScope - Extrator e Downloader de Mídias",
-    "subtitle": "Extraia qualquer tipo de mídia de qualquer site instantaneamente",
     "description": "WebScope permite extrair e baixar imagens, vídeos e arquivos de qualquer site de hospedagem de forma fácil e rápida.",
     "footer": "© 2026 WebScope - Downloader Dashboard. Desenvolvido com Node.js puro & Vanilla JS."
   },
@@ -33,8 +32,7 @@
     "video": "Vídeos",
     "image": "Imagens",
     "audio": "Áudios",
-    "document": "Documentos",
-    "search_input": "Buscar mídias..."
+    "document": "Documentos"
   },
   "actions": {
     "select_all": "Selecionar Todos",
@@ -59,7 +57,8 @@
     "compact_title": "Modo Compacto"
   },
   "status": {
-    "empty": "Nenhuma mídia encontrada. Cole uma URL acima para começar a análise.",
+    "empty": "Nenhuma mídia encontrada.",
+    "empty_hint": "Cole uma URL acima para começar a análise.",
     "found_count": "{count} mídia(s) encontrada(s)",
     "loading": "Extraindo informações e links de mídia...",
     "downloading": "Baixando...",
@@ -70,14 +69,11 @@
   },
   "zip": {
     "title": "Download em Lote (ZIP)",
-    "preparing": "Preparando arquivos para compressão...",
     "progress": "Processando arquivo {current} de {total}",
     "queued_waiting": "Aguardando na fila",
     "queued_position": "Aguardando na fila — posição {position}",
     "download_ready": "Seu arquivo ZIP está pronto!",
     "download_btn": "Baixar ZIP Agora",
-    "speed": "Velocidade: {speed}",
-    "estimated_bytes": "Tamanho processado: {bytes}",
     "start_error": "Falha ao iniciar empacotamento ZIP",
     "task_error": "Task cancelada ou com erro",
     "rename_label": "Nomeie seu arquivo ZIP",
@@ -91,7 +87,6 @@
     }
   },
   "modal": {
-    "preview_title": "Visualizar Mídia",
     "unsupported_preview": "Visualização não suportada para este tipo de arquivo."
   },
   "dl": {
@@ -101,12 +96,23 @@
     "complete": "Download concluído!",
     "error": "Erro no download",
     "downloading": "Baixando",
-    "paused": "Pausado"
+    "paused": "Pausado",
+    "paused_at": "Pausado — {pct}%",
+    "retry": "Tentar novamente",
+    "done": "Concluir"
   },
   "queue": {
-    "title": "Downloads Ativos",
     "empty": "Nenhum download em andamento",
-    "clear_done": "Limpar concluídos"
+    "clear_done": "Limpar concluídos",
+    "active_one": "{count} download ativo",
+    "active_other": "{count} downloads ativos",
+    "tab_active": "Ativos",
+    "tab_completed": "Concluídos",
+    "tab_failed": "Falhas",
+    "empty_completed": "Nenhum download concluído",
+    "empty_failed": "Nenhuma falha de download",
+    "summary": "Resumo",
+    "total_downloaded": "Total baixado"
   },
   "toast": {
     "analyzed_success": "Mídias extraídas com sucesso!",

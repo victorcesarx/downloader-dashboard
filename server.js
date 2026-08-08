@@ -6,7 +6,7 @@ import path from 'path';
 import { analyzePage } from './server/scrapers/index.js';
 import { scrapeGeneric } from './server/scrapers/generic.js';
 import {
-  MIME_TYPES, CACHE_DURATIONS, fetchWithCookies, enrichItemSizes,
+  MIME_TYPES, CACHE_DURATIONS, enrichItemSizes,
   extractOGImage, escapeRegex, cookieJar, getCookies, setCookies, fetchText
 } from './server/utils.js';
 import {

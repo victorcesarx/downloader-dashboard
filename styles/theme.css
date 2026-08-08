@@ -1,0 +1,114 @@
+/* ============================================================
+   WebScope Theme
+   Estilos globais de base — NENHUMA regra de componente.
+
+   Responsável exclusivamente por:
+     · html
+     · body
+     · seleção de texto (::selection)
+     · scrollbar (WebKit + Firefox)
+     · :focus-visible (acessibilidade)
+
+   Depende de `design-tokens.css` (importado abaixo) para as
+   variáveis `--ds-*`.
+   ============================================================ */
+
+@import url('design-tokens.css');
+
+/* ============================================================
+   HTML · Raiz do documento
+   Configurações de base que não dependem de componentes.
+   ============================================================ */
+
+html {
+  /* Evita o zoom automático de fonte em dispositivos móveis ao
+     girar a tela — mantém a escala definida pelo usuário */
+  -webkit-text-size-adjust: 100%;
+
+  /* Base tipográfica de 16px para a escala rem */
+  font-size: 16px;
+
+  /* Cor de fundo online e offline da "chrome" do browser */
+  background-color: var(--ds-bg);
+}
+
+/* ============================================================
+   BODY · Corpo principal
+   Tipografia e cores base herdadas por todo o conteúdo.
+   ============================================================ */
+
+body {
+  /* Família de fonte padrão do corpo */
+  font-family: var(--ds-font-sans);
+
+  /* Fundo principal do app */
+  background-color: var(--ds-bg);
+
+  /* Cor padrão do texto */
+  color: var(--ds-text-primary);
+
+  /* Entrelinha confortável para leitura */
+  line-height: 1.6;
+}
+
+/* ============================================================
+   SELEÇÃO DE TEXTO · ::selection
+   Destaque visual ao selecionar texto com o mouse/teclado.
+   ============================================================ */
+
+::selection {
+  /* Fundo da seleção usa a cor primária do WebScope */
+  background-color: var(--ds-primary);
+
+  /* Texto selecionado em cor de alto contraste sobre o accent */
+  color: var(--ds-primary-contrast);
+}
+
+/* ============================================================
+   SCROLLBAR · WebKit / Chromium / Safari
+   Estilização do scrollbar em navegadores baseados em WebKit.
+   ============================================================ */
+
+/* Conteiner do scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+/* Trilha do scrollbar (fundo onde o thumb desliza) */
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Alça (thumb) do scrollbar */
+::-webkit-scrollbar-thumb {
+  background-color: var(--ds-border-strong);
+  border-radius: var(--ds-radius-lg);
+}
+
+/* Alça do scrollbar ao passar o mouse */
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ds-text-muted);
+}
+
+/* ============================================================
+   SCROLLBAR · Firefox
+   Versão enxuta do scrollbar para o Firefox (1 linha).
+   ============================================================ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ds-border-strong) transparent;
+}
+
+/* ============================================================
+   FOCUS-VISIBLE · Acessibilidade por teclado
+   Enfoque apenas quando o navegador detecta interação via
+   teclado (Tab), sem afetar cliques do mouse.
+   ============================================================ */
+
+:focus-visible {
+  /* Anel de foco visível e consistente para navegação */
+  outline: 2px solid var(--ds-primary);
+  outline-offset: 2px;
+}

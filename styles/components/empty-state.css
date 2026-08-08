@@ -1,0 +1,71 @@
+/* ============================================================
+   WebScope Components · Empty State
+   Estado vazio para listas e contêineres sem resultado.
+   Estrutura: ícone · título · descrição · ação opcional.
+
+   Usa exclusivamente Design Tokens (styles/design-tokens.css).
+   ============================================================ */
+
+/* ============================================================
+   BASE · .ds-empty-state
+   Contêiner centralizado com fluxo em coluna.
+   ============================================================ */
+
+.ds-empty-state {
+  /* Layout centralizado e empilhado */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ds-space-12);
+
+  /* Espaçamento confortável em volta */
+  padding: var(--ds-space-32);
+
+  /* Alinhamento e tom de texto */
+  text-align: center;
+  font-family: var(--ds-font-sans);
+  color: var(--ds-text-muted);
+}
+
+/* ============================================================
+   ELEMENTO · Ícone (ilustração/SVG)
+   ============================================================ */
+
+.ds-empty-state__icon {
+  width: var(--ds-space-48);
+  height: var(--ds-space-48);
+  color: var(--ds-text-muted);
+  opacity: 0.5;
+}
+
+/* ============================================================
+   ELEMENTO · Título
+   ============================================================ */
+
+.ds-empty-state__title {
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-font-size-lg);
+  font-weight: var(--ds-font-weight-semibold);
+  color: var(--ds-text-primary);
+}
+
+/* ============================================================
+   ELEMENTO · Descrição
+   Texto de apoio com largura limitada para leitura confortável.
+   ============================================================ */
+
+.ds-empty-state__description {
+  font-size: var(--ds-font-size-sm);
+  color: var(--ds-text-secondary);
+  max-width: 40ch;
+}
+
+/* ============================================================
+   ELEMENTO · Ação (opcional)
+   Botão/CTA abaixo da descrição.
+   ============================================================ */
+
+.ds-empty-state__action {
+  margin-top: var(--ds-space-8);
+}

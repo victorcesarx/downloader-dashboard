@@ -5,7 +5,7 @@ import { store } from './state.js';
 import { initI18n, loadLocale, t } from './i18n.js';
 import { analyzeUrl, clearCache } from './analyzer.js';
 import { renderMediaContainer, updateBatchActionsUI, updateAllCardSelections, toggleBlur, getDisplayItems } from './renderer.js';
-import { Toast, playBeep } from './utils.js';
+import { Toast } from './utils.js';
 import { startZipDownload } from './zip-download.js';
 import { initQueue, toggleQueue } from './download-queue.js';
 
@@ -198,13 +198,11 @@ function setupEventListeners() {
   const soundBtn = document.getElementById('sound-btn');
   if (soundBtn) {
     soundBtn.classList.toggle('active', store.state.soundEnabled);
-    soundBtn.textContent = store.state.soundEnabled ? '🔊' : '🔇';
     soundBtn.addEventListener('click', () => {
       const next = !store.state.soundEnabled;
       store.state.soundEnabled = next;
       localStorage.setItem('downdash_sound', next);
       soundBtn.classList.toggle('active', next);
-      soundBtn.textContent = next ? '🔊' : '🔇';
     });
   }
 
@@ -248,4 +246,10 @@ function setupEventListeners() {
     if (allPill) allPill.classList.add('active');
     renderMediaContainer();
   };
+
+  // "Limpar filtros" do empty state: listener delegado em vez de
+  // onclick inline (bloqueado pela CSP `script-src 'self'`).
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.filter-clear-btn')) window.__clearFilters();
+  });
 }

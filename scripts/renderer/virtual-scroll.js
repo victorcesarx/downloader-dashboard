@@ -1,6 +1,7 @@
 import { store } from '../state.js';
 import { buildCardHtml } from './cards.js';
 import { attachCardEvents } from './events.js';
+import { restoreDownloadState } from '../downloader.js';
 
 // Virtual scroll state
 export const vs = {
@@ -69,17 +70,17 @@ function vsMeasure() {
   if (vs.viewMode === 'list') {
     vs.columns = 1;
     vs.cardWidth = w;
-    vs.cardHeight = 80;
+    vs.cardHeight = 88;
   } else if (vs.viewMode === 'compact') {
     const minW = 180;
     vs.columns = Math.max(1, Math.floor((w + gap) / (minW + gap)));
     vs.cardWidth = Math.floor((w - (vs.columns - 1) * gap) / vs.columns);
-    vs.cardHeight = 200;
+    vs.cardHeight = 240;
   } else {
     const minW = 280;
     vs.columns = Math.max(1, Math.floor((w + gap) / (minW + gap)));
     vs.cardWidth = Math.floor((w - (vs.columns - 1) * gap) / vs.columns);
-    vs.cardHeight = 340;
+    vs.cardHeight = 360;
   }
 
   const totalRows = Math.ceil(vs.items.length / vs.columns);
@@ -146,6 +147,10 @@ function vsRender() {
     card.style.margin = '0';
     card.style.transition = 'none';
     card.style.animation = 'none';
+
+    // Card recriado nasce idle — se o item ainda está baixando,
+    // restaura o estado visual real (download/paused/error/...).
+    restoreDownloadState(item, card);
   }
 
   // Apply blur

@@ -1,7 +1,6 @@
 {
   "app": {
     "title": "WebScope - Media Extractor & Downloader",
-    "subtitle": "Extract any type of media from any site instantly",
     "description": "Extract videos, audio, images and documents from any site instantly for individual or batch (ZIP) download.",
     "footer": "© 2026 WebScope - Downloader Dashboard. Built with vanilla Node.js & Vanilla JS."
   },
@@ -33,8 +32,7 @@
     "video": "Videos",
     "image": "Images",
     "audio": "Audio",
-    "document": "Documents",
-    "search_input": "Search media..."
+    "document": "Documents"
   },
   "actions": {
     "select_all": "Select All",
@@ -59,7 +57,8 @@
     "compact_title": "Compact View"
   },
   "status": {
-    "empty": "No media found. Paste a URL above to start analyzing.",
+    "empty": "No media found.",
+    "empty_hint": "Paste a URL above to start analyzing.",
     "found_count": "{count} media item(s) found",
     "loading": "Extracting information and media links...",
     "downloading": "Downloading...",
@@ -70,14 +69,11 @@
   },
   "zip": {
     "title": "Batch Download (ZIP)",
-    "preparing": "Preparing files for compression...",
     "progress": "Processing file {current} of {total}",
     "queued_waiting": "Waiting in queue",
     "queued_position": "Waiting in queue — position {position}",
     "download_ready": "Your ZIP file is ready!",
     "download_btn": "Download ZIP Now",
-    "speed": "Speed: {speed}",
-    "estimated_bytes": "Processed size: {bytes}",
     "start_error": "Failed to start ZIP packaging",
     "task_error": "Task cancelled or error",
     "rename_label": "Name your ZIP file",
@@ -91,7 +87,6 @@
     }
   },
   "modal": {
-    "preview_title": "Media Preview",
     "unsupported_preview": "Preview not supported for this file type."
   },
   "dl": {
@@ -101,12 +96,23 @@
     "complete": "Download complete!",
     "error": "Download error",
     "downloading": "Downloading",
-    "paused": "Paused"
+    "paused": "Paused",
+    "paused_at": "Paused — {pct}%",
+    "retry": "Try again",
+    "done": "Done"
   },
   "queue": {
-    "title": "Active Downloads",
     "empty": "No active downloads",
-    "clear_done": "Clear completed"
+    "clear_done": "Clear completed",
+    "active_one": "{count} active download",
+    "active_other": "{count} active downloads",
+    "tab_active": "Active",
+    "tab_completed": "Completed",
+    "tab_failed": "Failed",
+    "empty_completed": "No completed downloads",
+    "empty_failed": "No failed downloads",
+    "summary": "Summary",
+    "total_downloaded": "Total downloaded"
   },
   "toast": {
     "analyzed_success": "Media extracted successfully!",

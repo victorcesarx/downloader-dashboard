@@ -1,0 +1,15 @@
+/* ============================================================
+   WebScope Components · Biblioteca de Componentes
+   Ponto único de importação do Design System.
+
+   Importa os tokens primeiro (todas as regras os consomem)
+   e, em seguida, cada componente da biblioteca.
+   ============================================================ */
+
+@import url('../design-tokens.css');
+@import url('button.css');
+@import url('input.css');
+@import url('badge.css');
+@import url('card.css');
+@import url('spinner.css');
+@import url('empty-state.css');

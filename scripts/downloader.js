@@ -1,4 +1,4 @@
-import { Toast, formatBytes, formatSpeed, apiFetch, playBeep, ensureFileExtension, extensionFromMime } from './utils.js';
+import { Toast, formatBytes, formatSpeed, apiFetch, playBeep, sanitizeHtml, ensureFileExtension, extensionFromMime } from './utils.js';
 import { t } from './i18n.js';
 import { store } from './state.js';
 
@@ -21,52 +21,178 @@ function notifyChange() {
   if (_onChange) _onChange(activeDownloads);
 }
 
+// ---------------------------------------------------------------------------
+// Máquina de estados visual da Action Area (.card-state)
+//
+// A área tem altura fixa definida em CSS (min-height) e existe desde o
+// primeiro render do card. Cada estado apenas troca o conteúdo interno da
+// área — a altura total do card nunca muda, portanto não há layout shift,
+// nem no grid, nem nas linhas vizinhas.
+// ---------------------------------------------------------------------------
+
+function progressBarHtml(widthPct, extraClass = '') {
+  return `
+    <div class="card-state-bar">
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill ${extraClass}" style="width:${widthPct}%;"></div>
+      </div>
+    </div>`;
+}
+
+function infoLineHtml(speedText, bytesText) {
+  return `
+    <div class="card-state-info">
+      <span class="card-state-speed">${speedText}</span>
+      <span class="card-state-bytes">${bytesText}</span>
+    </div>`;
+}
+
+function controlsRowHtml(buttonsHtml) {
+  return `<div class="card-state-controls">${buttonsHtml}</div>`;
+}
+
+function stateBtnHtml(kind, label, opts = '') {
+  const cls = kind === 'primary' ? 'btn-primary' : 'btn-secondary';
+  return `<button class="btn ${cls} btn-sm" ${opts}>${label}</button>`;
+}
+
+function downloadingHTML(ad, paused = false) {
+  const pct = ad.totalLength > 0 ? Math.round((ad.receivedLength / ad.totalLength) * 100) : 0;
+  const width = ad.totalLength > 0 ? Math.min(pct, 100) : 0;
+  const bytes = ad.totalLength > 0
+    ? `${formatBytes(ad.receivedLength)} / ${formatBytes(ad.totalLength)}`
+    : formatBytes(ad.receivedLength);
+  const speed = paused ? t('dl.paused_at', { pct }) : formatSpeed(ad.speed);
+  const pauseLabel = paused ? `▶ ${t('dl.resume')}` : `⏸ ${t('dl.pause')}`;
+  return `
+    ${progressBarHtml(width)}
+    ${infoLineHtml(speed, `${bytes} · ${pct}%`)}
+    ${controlsRowHtml(`
+      ${stateBtnHtml('secondary', pauseLabel, 'data-action="pause"')}
+      ${stateBtnHtml('secondary', `✕ ${t('dl.cancel')}`, 'data-action="cancel"')}
+    `)}
+  `;
+}
+
+function completeHTML() {
+  return `
+    ${progressBarHtml(100, 'card-state-fill--done')}
+    <div class="card-state-result card-state-result--done">
+      <span>✅ ${t('dl.complete')}</span>
+    </div>
+    <div class="card-state-actions">
+      <button class="btn btn-secondary btn-sm" disabled>${t('dl.done')}</button>
+    </div>
+  `;
+}
+
+function errorHTML(ad) {
+  return `
+    ${progressBarHtml(100, 'card-state-fill--error')}
+    <div class="card-state-result card-state-result--error" title="${sanitizeHtml(ad.errorMsg || '')}">
+      <span>❌ ${sanitizeHtml(ad.shortMsg || t('dl.error'))}</span>
+    </div>
+    <div class="card-state-actions">
+      <button class="btn btn-primary btn-sm" data-action="retry">${t('dl.retry')}</button>
+      <button class="btn btn-secondary btn-sm" data-action="close">${t('actions.close')}</button>
+    </div>
+  `;
+}
+
+function renderState(ad, state) {
+  if (!ad || !ad.stateEl) return;
+  const el = ad.stateEl;
+  ad.state = state;
+  el.dataset.state = state;
+
+  if (state === 'downloading' || state === 'paused') {
+    const paused = state === 'paused';
+    el.innerHTML = downloadingHTML(ad, paused);
+    el.querySelector('[data-action="pause"]')?.addEventListener('click', () => togglePause(ad));
+    el.querySelector('[data-action="cancel"]')?.addEventListener('click', () => cancelDownload(ad));
+    return;
+  }
+
+  if (state === 'completed') {
+    el.innerHTML = completeHTML(ad);
+    return;
+  }
+
+  if (state === 'error') {
+    el.innerHTML = errorHTML(ad);
+    el.querySelector('[data-action="retry"]')?.addEventListener('click', () => retryDownload(ad));
+    el.querySelector('[data-action="close"]')?.addEventListener('click', () => cleanup(ad));
+    return;
+  }
+
+  el.dataset.state = 'idle';
+}
+
+// Referência estável do HTML idle da Action Area.
+//
+// Armazenada uma única vez, no primeiro download iniciado a partir de um
+// card realmente em estado idle. Retry/erro/pause/complete NUNCA recapturam
+// o HTML — a área que restaura depois de concluir/cancelar é sempre o
+// markup original dos botões, nunca o template de erro.
+const WS_IDLE_KEY = '__wsActionIdleHtml';
+
+function captureIdleHtml(stateEl) {
+  if (!stateEl) return null;
+  if (stateEl[WS_IDLE_KEY] !== undefined) return stateEl[WS_IDLE_KEY];
+  if (stateEl.dataset.state !== 'idle') return null;
+  stateEl[WS_IDLE_KEY] = stateEl.innerHTML;
+  return stateEl[WS_IDLE_KEY];
+}
+
+// Rebind da Action Area após remount do virtual scroll.
+//
+// O card recriado pela virtualização nasce em idle; se o item ainda tiver
+// um download ativo (activeDownloads é a fonte de verdade persistente),
+// re-ancora o ad no novo DOM e re-renderiza o estado visual real.
+// Não reinicia o download, não duplica timers/listeners: o ad original
+// (com AbortController, chunks e progresso) é apenas re-apegado. Controles
+// (pause/cancel/retry/close) são re-ligados pelo próprio renderState.
+export function restoreDownloadState(item, cardEl) {
+  if (!item || !cardEl) return false;
+  const ad = activeDownloads.get(item.id);
+  if (!ad) return false;
+
+  const stateEl = cardEl.querySelector('.card-state');
+  if (!stateEl) return false;
+
+  ad.cardEl = cardEl;
+  ad.stateEl = stateEl;
+  renderState(ad, ad.state);
+  return true;
+}
+
 export function downloadFile(item, cardEl) {
   if (activeDownloads.has(item.id)) {
     Toast.show(t('toast.download_in_progress'), 'warning');
     return;
   }
 
+  const stateEl = cardEl.querySelector('.card-state');
+  if (!stateEl) return;
+
   const controller = new AbortController();
   const ad = {
-    item, cardEl, controller,
+    item, cardEl, stateEl, controller,
     paused: false, resume: null,
     chunks: [],
     receivedLength: 0, totalLength: 0,
     startTime: Date.now(),
     lastCheckTime: Date.now(), lastCheckBytes: 0,
     speed: 0, speedInterval: null,
+    idleHtml: captureIdleHtml(stateEl),
+    state: 'idle',
     _done: false
   };
 
   activeDownloads.set(item.id, ad);
   notifyChange();
 
-  const actions = cardEl.querySelector('.card-actions');
-  ad.actionsChildren = Array.from(actions.children);
-  ad.actionsChildren.forEach(el => el.style.display = 'none');
-
-  const progressEl = document.createElement('div');
-  progressEl.className = 'card-progress-inline';
-  progressEl.innerHTML = `
-    <div class="progress-bar-container" style="margin:0;">
-      <div class="progress-bar-fill" style="width:0%;"></div>
-    </div>
-    <div style="display:flex; justify-content:space-between; font-size:0.7rem; color:var(--text-muted); margin-top:2px;">
-      <span class="cp-speed">${formatSpeed(0)}</span>
-      <span class="cp-bytes">${formatBytes(0)}</span>
-    </div>
-    <div style="display:flex; gap:4px; margin-top:4px;">
-      <button class="btn btn-secondary btn-sm cp-pause" style="flex:1;padding:2px 6px;font-size:0.7rem;" title="${t('dl.pause')}">⏸ ${t('dl.pause')}</button>
-      <button class="btn btn-secondary btn-sm cp-cancel" style="flex:1;padding:2px 6px;font-size:0.7rem;" title="${t('dl.cancel')}">✕ ${t('dl.cancel')}</button>
-    </div>
-  `;
-  actions.appendChild(progressEl);
-  actions.style.flexDirection = 'column';
-
-  progressEl.querySelector('.cp-pause').addEventListener('click', () => togglePause(ad));
-  progressEl.querySelector('.cp-cancel').addEventListener('click', () => cancelDownload(ad));
-
+  renderState(ad, 'downloading');
   startSpeedTimer(ad);
   executeDownload(ad);
 }
@@ -86,10 +212,10 @@ async function executeDownload(ad) {
 
     while (true) {
       if (ad.paused) {
-        updatePauseUI(ad, true);
+        renderState(ad, 'paused');
         await new Promise(resolve => { ad.resume = resolve; });
         if (ad._done) return;
-        updatePauseUI(ad, false);
+        renderState(ad, 'downloading');
       }
 
       ad.controller.signal.throwIfAborted();
@@ -105,7 +231,7 @@ async function executeDownload(ad) {
     finishDownload(ad);
   } catch (err) {
     if (err.name === 'AbortError') return cleanup(ad);
-    onError(ad, err.message);
+    onError(ad, err);
   }
 }
 
@@ -117,18 +243,21 @@ function finishDownload(ad) {
 
   const blob = new Blob(ad.chunks);
   const blobUrl = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = blobUrl;
-  a.download = ensureFileExtension(
+  const fileName = ensureFileExtension(
     ad.item.name,
     ad.item.ext || extensionFromMime(ad.contentType) || 'bin'
   );
+  ad.blobUrl = blobUrl;
+
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = fileName;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(blobUrl);
 
-  showDoneUI(ad);
+  renderState(ad, 'completed');
   setTimeout(() => cleanup(ad), 2500);
 }
 
@@ -143,8 +272,10 @@ function startSpeedTimer(ad) {
     }
     ad.lastCheckTime = now;
     ad.lastCheckBytes = ad.receivedLength;
-    const el = ad.cardEl?.querySelector('.cp-speed');
-    if (el) el.textContent = formatSpeed(ad.speed);
+    if (!ad.paused) {
+      const el = ad.stateEl?.querySelector('.card-state-speed');
+      if (el) el.textContent = formatSpeed(ad.speed);
+    }
   }, 200);
 }
 
@@ -155,14 +286,14 @@ function updateProgress(ad) {
   if (ad._lastProgressUpdate && (now - ad._lastProgressUpdate) < 200) return;
   ad._lastProgressUpdate = now;
 
-  const bar = ad.cardEl?.querySelector('.progress-bar-fill');
-  const bytesEl = ad.cardEl?.querySelector('.cp-bytes');
+  const bar = ad.stateEl?.querySelector('.progress-bar-fill');
+  const bytesEl = ad.stateEl?.querySelector('.card-state-bytes');
 
   if (ad.totalLength > 0 && bar) {
+    bar.classList.remove('is-indeterminate');
     bar.style.width = `${Math.min((ad.receivedLength / ad.totalLength) * 100, 100)}%`;
   } else if (bar) {
-    bar.style.width = '100%';
-    bar.style.opacity = '0.3';
+    bar.classList.add('is-indeterminate');
   }
 
   if (bytesEl) {
@@ -183,63 +314,49 @@ function togglePause(ad) {
   }
 }
 
-function updatePauseUI(ad, paused) {
-  if (!ad || ad._done) return;
-  const btn = ad.cardEl?.querySelector('.cp-pause');
-  if (btn) btn.textContent = paused ? `▶ ${t('dl.resume')}` : `⏸ ${t('dl.pause')}`;
-}
-
 function cancelDownload(ad) {
   if (!ad || ad._done) return;
   ad.controller.abort();
   cleanup(ad);
 }
 
-function showDoneUI(ad) {
-  if (!ad || !ad.cardEl) return;
-  const progressEl = ad.cardEl.querySelector('.card-progress-inline');
-  if (progressEl) {
-    progressEl.innerHTML = `
-      <div style="display:flex; align-items:center; gap:8px; font-size:0.8rem; color:var(--success);">
-        <span>✅</span>
-        <span>${t('dl.complete')}</span>
-      </div>
-    `;
-  }
-}
-
-function onError(ad, message) {
+function onError(ad, err) {
   if (!ad || ad._done) return;
   ad._done = true;
-  Toast.show(`${t('dl.error')}: ${message}`, 'error');
-  const progressEl = ad.cardEl?.querySelector('.card-progress-inline');
-  if (progressEl) {
-    progressEl.innerHTML = `
-      <div style="display:flex; align-items:center; gap:8px; font-size:0.8rem; color:var(--danger);">
-        <span>❌</span>
-        <span>${t('dl.error')}</span>
-      </div>
-      <button class="btn btn-primary btn-sm cp-close" style="margin-top:6px;width:100%;padding:4px 8px;font-size:0.75rem;" title="${t('actions.close')}">${t('actions.close')}</button>
-    `;
-    progressEl.querySelector('.cp-close')?.addEventListener('click', () => cleanup(ad));
+  ad.errorMsg = String(err && err.message ? err.message : err);
+  ad.shortMsg = t('dl.error');
+  Toast.show(`${t('dl.error')}: ${ad.errorMsg}`, 'error');
+  stopTimer(ad);
+  renderState(ad, 'error');
+}
+
+function retryDownload(ad) {
+  if (!ad) return;
+  const item = ad.item;
+  const cardEl = ad.cardEl;
+  stopTimer(ad);
+  ad._cleanedUp = true;
+  activeDownloads.delete(item.id);
+  downloadFile(item, cardEl);
+}
+
+function stopTimer(ad) {
+  if (ad && ad.speedInterval) {
+    clearInterval(ad.speedInterval);
+    ad.speedInterval = null;
   }
-  setTimeout(() => cleanup(ad), 4000);
 }
 
 function cleanup(ad) {
   if (!ad || ad._cleanedUp) return;
   ad._cleanedUp = true;
-  if (ad.speedInterval) {
-    clearInterval(ad.speedInterval);
-    ad.speedInterval = null;
-  }
+  stopTimer(ad);
   activeDownloads.delete(ad.item.id);
   notifyChange();
-  const progressEl = ad.cardEl?.querySelector('.card-progress-inline');
-  if (progressEl) progressEl.remove();
-  const actions = ad.cardEl?.querySelector('.card-actions');
-  if (actions) {
-    actions.style.flexDirection = '';
-    (ad.actionsChildren || []).forEach(el => el.style.display = '');
+  if (ad.blobUrl) URL.revokeObjectURL(ad.blobUrl);
+  const el = ad.stateEl;
+  if (el) {
+    el.dataset.state = 'idle';
+    if (ad.idleHtml) el.innerHTML = ad.idleHtml;
   }
 }

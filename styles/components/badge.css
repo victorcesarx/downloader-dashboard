@@ -1,0 +1,89 @@
+/* ============================================================
+   WebScope Components · Badge
+   Rótulo compacto de status/variante.
+
+   Variantes: --primary · --success · --warning · --danger ·
+              --info · --neutral
+   (todas usam fundo translúcido + texto da cor semântica)
+
+   Usa exclusivamente Design Tokens (styles/design-tokens.css).
+   ============================================================ */
+
+/* ============================================================
+   BASE · .ds-badge
+   Pílula compacta com gap para ícone opcional.
+   ============================================================ */
+
+.ds-badge {
+  /* Layout do conteúdo (ícone + rótulo) */
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-4);
+
+  /* Tipografia */
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-font-size-xs);
+  font-weight: var(--ds-font-weight-medium);
+  line-height: 1;
+  color: var(--ds-text-secondary);
+
+  /* Espaçamento compacto */
+  padding: var(--ds-space-4) var(--ds-space-8);
+
+  /* Formato pílula (raio maior para o elemento compacto) */
+  border-radius: var(--ds-radius-lg);
+}
+
+/* ============================================================
+   VARIANTE · Primary
+   ============================================================ */
+
+.ds-badge--primary {
+  background-color: var(--ds-primary-bg);
+  color: var(--ds-primary);
+}
+
+/* ============================================================
+   VARIANTE · Success
+   ============================================================ */
+
+.ds-badge--success {
+  background-color: var(--ds-success-bg);
+  color: var(--ds-success);
+}
+
+/* ============================================================
+   VARIANTE · Warning
+   ============================================================ */
+
+.ds-badge--warning {
+  background-color: var(--ds-warning-bg);
+  color: var(--ds-warning);
+}
+
+/* ============================================================
+   VARIANTE · Danger
+   ============================================================ */
+
+.ds-badge--danger {
+  background-color: var(--ds-danger-bg);
+  color: var(--ds-danger);
+}
+
+/* ============================================================
+   VARIANTE · Info
+   ============================================================ */
+
+.ds-badge--info {
+  background-color: var(--ds-info-bg);
+  color: var(--ds-info);
+}
+
+/* ============================================================
+   VARIANTE · Neutral
+   ============================================================ */
+
+.ds-badge--neutral {
+  background-color: var(--ds-neutral-bg);
+  color: var(--ds-neutral);
+}

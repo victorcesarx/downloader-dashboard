@@ -5,9 +5,33 @@ import { downloadSingleItem } from '../download.js';
 import { openPreviewModal } from './modal.js';
 import { updateBatchActionsUI, updateCardSize } from './batch.js';
 import { renderMediaContainer } from './index.js';
+import { TYPE_ICON_MAP } from './cards.js';
+
+// Imagem quebrada (CSP bloqueia `onerror` inline): evento `error` não
+// borbulha — escuta na fase de captura e troca pela thumbnail por um
+// placeholder de ícone, mesmo em re-renders (lazy/virtual).
+function attachImageErrorFallback(container) {
+  container.addEventListener('error', (e) => {
+    const img = e.target.closest?.('.card-media-img');
+    if (!img) return;
+    const card = img.closest('.media-card');
+    const item = card
+      ? store.state.items.find(i => String(i.id) === card.dataset.id)
+      : undefined;
+    const icon = (item && TYPE_ICON_MAP[item.type]) || '📄';
+    const preview = img.closest('.card-media-preview');
+    if (preview) preview.innerHTML = `<div class="media-placeholder-icon">${icon}</div>`;
+  }, true);
+}
 
 export function attachCardEvents(container, useDelegation = false) {
+  if (!container.__wsImgErrorBound) {
+    container.__wsImgErrorBound = true;
+    attachImageErrorFallback(container);
+  }
   if (useDelegation) {
+    if (container.__wsCardEventsBound) return;
+    container.__wsCardEventsBound = true;
     container.addEventListener('change', (e) => {
       const cb = e.target.closest('.card-checkbox');
       const sel = e.target.closest('.quality-select');

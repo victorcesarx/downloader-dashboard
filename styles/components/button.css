@@ -1,0 +1,168 @@
+/* ============================================================
+   WebScope Components · Button
+   Botão reutilizável do Design System.
+
+   Variantes: --primary · --secondary · --ghost · --danger
+   Estados:   hover · focus-visible · disabled · is-loading
+
+   Usa exclusivamente Design Tokens (styles/design-tokens.css).
+   ============================================================ */
+
+/* ============================================================
+   BASE · .ds-btn (alias legado: .btn)
+   Anatomia comum a todas as variantes e estados.
+
+   `.btn` é o alias de compatibilidade para os botões existentes
+   da aplicação — mantém HTML/JS intocados durante a migração.
+   ============================================================ */
+
+.ds-btn,
+.btn {
+  /* Layout do rótulo (ícone + texto) */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ds-space-8);
+
+  /* Tipografia */
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-font-size-sm);
+  font-weight: var(--ds-font-weight-semibold);
+  line-height: 1;
+
+  /* Compacto */
+  padding: var(--ds-space-8) var(--ds-space-16);
+
+  /* Aparência estruturada com tokens */
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-md);
+
+  /* Interação */
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  /* Movimento em micro-transições */
+  transition:
+    background-color var(--ds-transition-base),
+    color var(--ds-transition-base),
+    border-color var(--ds-transition-base);
+}
+
+/* ============================================================
+   VARIANTE · Primary (alias legado: .btn-primary)
+   Ação principal / destaque da página.
+   ============================================================ */
+
+.ds-btn--primary,
+.btn-primary {
+  background-color: var(--ds-primary);
+  color: var(--ds-primary-contrast);
+}
+
+/* Estado hover da variante primária */
+.ds-btn--primary:hover,
+.btn-primary:hover {
+  background-color: var(--ds-primary-hover);
+}
+
+/* ============================================================
+   VARIANTE · Secondary (alias legado: .btn-secondary)
+   Ação secundária com superfície própria.
+   ============================================================ */
+
+.ds-btn--secondary,
+.btn-secondary {
+  background-color: var(--ds-surface);
+  color: var(--ds-text-primary);
+  border-color: var(--ds-border-subtle);
+}
+
+/* Estado hover da variante secundária */
+.ds-btn--secondary:hover,
+.btn-secondary:hover {
+  background-color: var(--ds-surface-hover);
+  border-color: var(--ds-border-strong);
+}
+
+/* ============================================================
+   VARIANTE · Ghost
+   Ação leve sobre o fundo, sem superfície sólida.
+   ============================================================ */
+
+.ds-btn--ghost {
+  background-color: transparent;
+  color: var(--ds-text-secondary);
+  border-color: var(--ds-border-subtle);
+}
+
+/* Estado hover da variante ghost */
+.ds-btn--ghost:hover {
+  background-color: var(--ds-bg-alt);
+  color: var(--ds-text-primary);
+}
+
+/* ============================================================
+   VARIANTE · Danger (alias legado: .btn-danger)
+   Ação destrutiva ou de risco (excluir, cancelar).
+   ============================================================ */
+
+.ds-btn--danger,
+.btn-danger {
+  background-color: var(--ds-danger);
+  color: var(--ds-contrast-white);
+}
+
+/* Estado hover da variante danger */
+.ds-btn--danger:hover,
+.btn-danger:hover {
+  background-color: var(--ds-danger-hover);
+}
+
+/* ============================================================
+   ESTADO · :focus-visible (alias legado: .btn:focus-visible)
+   Anel de foco acessível ao navegar por teclado.
+   ============================================================ */
+
+.ds-btn:focus-visible,
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-ring);
+}
+
+/* ============================================================
+   ESTADO · :disabled (alias legado: .btn:disabled)
+   Botão indisponível — atenua e bloqueia interação.
+   ============================================================ */
+
+.ds-btn:disabled,
+.btn:disabled {
+  background-color: var(--ds-bg-alt);
+  color: var(--ds-text-muted);
+  border-color: var(--ds-border-subtle);
+  cursor: not-allowed;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* ============================================================
+   ESTADO · is-loading
+   Exibe o spinner (única animação do projeto) antes do rótulo.
+   ============================================================ */
+
+.ds-btn.is-loading {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Mini-spinner embutido no botão durante o carregamento */
+.ds-btn.is-loading::before {
+  content: "";
+  width: var(--ds-space-16);
+  height: var(--ds-space-16);
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--ds-radius-lg);
+  animation: ds-spin var(--ds-duration-slow) linear infinite;
+}

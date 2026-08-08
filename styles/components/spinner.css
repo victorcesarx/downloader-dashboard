@@ -1,0 +1,56 @@
+/* ============================================================
+   WebScope Components · Spinner
+   ÚNICA animação do projeto (@keyframes ds-spin).
+
+   Simples, sem glow. Tamanhos via .ds-spinner (padrão),
+   .ds-spinner--xs e .ds-spinner--lg.
+
+   Usa exclusivamente Design Tokens (styles/design-tokens.css).
+   ============================================================ */
+
+/* ============================================================
+   ANIMAÇÃO · @keyframes ds-spin
+   Rotação constante no sentido horário.
+   ============================================================ */
+
+@keyframes ds-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================
+   BASE · .ds-spinner
+   Círculo oco girando ao redor do próprio eixo.
+   ============================================================ */
+
+.ds-spinner {
+  width: var(--ds-space-32);
+  height: var(--ds-space-32);
+  border: 3px solid var(--ds-border-subtle);
+  border-top-color: var(--ds-primary);
+  border-radius: var(--ds-radius-lg);
+  animation: ds-spin var(--ds-duration-slow) linear infinite;
+}
+
+/* ============================================================
+   VARIAÇÃO · Extra pequeno
+   Para espaços compactos (botões, badges).
+   ============================================================ */
+
+.ds-spinner--xs {
+  width: var(--ds-space-16);
+  height: var(--ds-space-16);
+  border-width: 2px;
+}
+
+/* ============================================================
+   VARIAÇÃO · Grande
+   Para áreas de carregamento em destaque.
+   ============================================================ */
+
+.ds-spinner--lg {
+  width: var(--ds-space-48);
+  height: var(--ds-space-48);
+  border-width: 4px;
+}

@@ -1,0 +1,262 @@
+/* ============================================================
+   WebScope Design Tokens
+   Identidade visual definitiva do Design System.
+
+   Único arquivo de tokens (variáveis CSS) — nenhuma regra de
+   componente. A aplicação ainda consome main.css; a adoção dos
+   tokens ocorre em etapa própria de migração.
+
+   Convenção: `--ds-<categoria>-<nome>`.
+   Escopo: `:root` (global).
+   ============================================================ */
+
+:root {
+  /* ==========================================================
+     BACKGROUND
+     Camadas de fundo globais do app.
+     ========================================================== */
+
+  /* Fundo principal da aplicação */
+  --ds-bg: #0e1116;
+
+  /* Fundo secundário — painéis, seções, campos */
+  --ds-bg-alt: #13171d;
+
+  /* Overlay de modais e backdrops sobre o app */
+  --ds-bg-overlay: rgba(0, 0, 0, 0.8);
+
+  /* ==========================================================
+     SURFACE
+     Superfícies elevadas (cards, menus, painéis flutuantes).
+     ========================================================== */
+
+  /* Elevação base — cards e containers sobre o fundo */
+  --ds-surface: #171b22;
+
+  /* Elevação hover — cards ao passar o mouse */
+  --ds-surface-hover: #1e2430;
+
+  /* ==========================================================
+     BORDER
+     Bordas e divisores de baixa/média ênfase.
+     ========================================================== */
+
+  /* Divisores sutis — bordas de cards, navbar, linhas */
+  --ds-border-subtle: #262d38;
+
+  /* Divisores mais visíveis — separadores e hover */
+  --ds-border-strong: #394150;
+
+  /* ==========================================================
+     TEXT
+     Hierarquia tipográfica de cor.
+     ========================================================== */
+
+  /* Texto com maior ênfase — headings, conteúdo principal */
+  --ds-text-primary: #f2f4f8;
+
+  /* Texto de suporte — parágrafos, labels, descrições */
+  --ds-text-secondary: #9aa4b2;
+
+  /* Texto de baixa ênfase — placeholders, metadados */
+  --ds-text-muted: #667085;
+
+  /* ==========================================================
+     PRIMARY · Cor de marca
+     Cor principal do WebScope e seus derivados.
+     ========================================================== */
+
+  /* Cor principal — links, botões primários, foco */
+  --ds-primary: #6c63ff;
+
+  /* Variação hover da cor principal */
+  --ds-primary-hover: #5b54e8;
+
+  /* Texto/ícone sobre a cor principal (contraste) */
+  --ds-primary-contrast: #ffffff;
+
+  /* Fundo translúcido da cor principal — badges, selos */
+  --ds-primary-bg: rgba(108, 99, 255, 0.15);
+
+  /* ==========================================================
+     SUCCESS
+     Estados de sucesso (sucesso, completo, aprovado).
+     ========================================================== */
+
+  /* Cor de sucesso — bordas, ícones, confirmações */
+  --ds-success: #22c55e;
+
+  /* Fundo translúcido de sucesso — badges, toast, selos */
+  --ds-success-bg: rgba(34, 197, 94, 0.15);
+
+  /* ==========================================================
+     WARNING
+     Estados de aviso (atenção, pendente, cautela).
+     ========================================================== */
+
+  /* Cor de warning — bordas, ícones, indicadores */
+  --ds-warning: #f59e0b;
+
+  /* Fundo translúcido de warning — badges, selos */
+  --ds-warning-bg: rgba(245, 158, 11, 0.15);
+
+  /* ==========================================================
+     DANGER
+     Estados de erro (falha, cancelado, perigoso).
+     ========================================================== */
+
+  /* Cor de perigo — erros, cancelamentos, ações destrutivas */
+  --ds-danger: #ef4444;
+
+  /* Fundo translúcido de perigo — badges, selos, toasts */
+  --ds-danger-bg: rgba(239, 68, 68, 0.15);
+
+  /* Variação hover da cor de perigo — botões destrutivos */
+  --ds-danger-hover: #dc2626;
+
+  /* ==========================================================
+     INFO
+     Estados informativos (novidades, links, dicas).
+     ========================================================== */
+
+  /* Cor informativa — badges, ícones de dica, links de ajuda */
+  --ds-info: #3b82f6;
+
+  /* Fundo translúcido informativo — badges, selos, toasts */
+  --ds-info-bg: rgba(59, 130, 246, 0.15);
+
+  /* ==========================================================
+     NEUTRAL · Neutro
+     Estado neutro (vazio, sem prioridade, sem cor semântica).
+     ========================================================== */
+
+  /* Cor neutra — badges, ícones, metadados */
+  --ds-neutral: #94a3b8;
+
+  /* Fundo translúcido neutro — badges, selos */
+  --ds-neutral-bg: rgba(148, 163, 184, 0.15);
+
+  /* ==========================================================
+     CONTRAST · Texto sobre cor
+     Texto de alto contraste sobre superfícies coloridas.
+     ========================================================== */
+
+  /* Texto branco sobre cores saturadas (danger, informativo) */
+  --ds-contrast-white: #ffffff;
+
+  /* ==========================================================
+     FOCUS RING · Anel de foco
+     Indicador acessível de foco via teclado.
+     ========================================================== */
+
+  /* Cor do anel de foco (transparente da cor primária) */
+  --ds-ring-color: rgba(108, 99, 255, 0.25);
+
+  /* Sombras de anel de foco — inputs, botões, cards selecionados */
+  --ds-ring: 0 0 0 3px var(--ds-ring-color);
+
+  /* ==========================================================
+     DURATION · Duração de animações
+     Duração da única animação do projeto (spin do spinner).
+     ========================================================== */
+
+  --ds-duration-fast: 150ms;
+  --ds-duration-base: 300ms;
+  --ds-duration-slow: 600ms;
+
+  /* ==========================================================
+     FONT SIZE · Tamanhos de fonte
+     Escala tipográfica de corpo usada pelos componentes.
+     ========================================================== */
+
+  --ds-font-size-xs: 12px;
+  --ds-font-size-sm: 14px;
+  --ds-font-size-base: 16px;
+  --ds-font-size-lg: 18px;
+  --ds-font-size-xl: 24px;
+
+  /* ==========================================================
+     SPACING · Espaçamento
+     Escala fixa de espaçamento (múltiplos de 4).
+     Uso: margin/gap/padding com `--ds-space-*`.
+     ========================================================== */
+
+  --ds-space-4: 4px;
+  --ds-space-8: 8px;
+  --ds-space-12: 12px;
+  --ds-space-16: 16px;
+  --ds-space-24: 24px;
+  --ds-space-32: 32px;
+  --ds-space-48: 48px;
+  --ds-space-64: 64px;
+
+  /* ==========================================================
+     RADIUS · Cantos arredondados
+     Escala de border-radius para superfícies.
+     ========================================================== */
+
+  /* Cantos pequenos — badges, inputs, selos */
+  --ds-radius-sm: 6px;
+
+  /* Cantos médios — cards, painéis, botões */
+  --ds-radius-md: 8px;
+
+  /* Cantos grandes — modais, cards destacados */
+  --ds-radius-lg: 12px;
+
+  /* ==========================================================
+     SHADOW · Sombras
+     Elevação discreta de superfícies e overlays.
+     ========================================================== */
+
+  /* Sombra sutil de superfícies elevadas (cards) */
+  --ds-shadow-surface: 0 1px 3px rgba(0, 0, 0, 0.25);
+
+  /* Sombra de camadas flutuantes (modais, menus, dropdowns) */
+  --ds-shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.35);
+
+  /* ==========================================================
+     TRANSITION · Movimento
+     Micro-transições com o único easing padrão.
+     ========================================================== */
+
+  /* Easing padrão (acelera/desacelera suave) */
+  --ds-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Transição rápida — hovers, foco, pequenas mudanças */
+  --ds-transition-fast: 100ms var(--ds-ease-standard);
+
+  /* Transição padrão — estados e entrada de elementos */
+  --ds-transition-base: 150ms var(--ds-ease-standard);
+
+  /* Transição lenta — mudanças de maior destaque */
+  --ds-transition-slow: 200ms var(--ds-ease-standard);
+
+  /* ==========================================================
+     FONT · Tipografia
+     Uma única família de interface + monospace técnica.
+     ========================================================== */
+
+  /* Fonte única de interface — corpo e headings (Inter) */
+  --ds-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Fonte de código — URLs, ids, metadados técnicos */
+  --ds-font-mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+
+  /* ==========================================================
+     FONT WEIGHT · Pesos da fonte
+     Pesos utilizados na hierarquia tipográfica.
+     ========================================================== */
+
+  /* Regular — corpo padrão de texto */
+  --ds-font-weight-regular: 400;
+
+  /* Medium — labels, botões, ênfase leve */
+  --ds-font-weight-medium: 500;
+
+  /* Semibold — sub-títulos, títulos de seção */
+  --ds-font-weight-semibold: 600;
+
+  /* Bold — headings e destaques fortes */
+  --ds-font-weight-bold: 700;
+}

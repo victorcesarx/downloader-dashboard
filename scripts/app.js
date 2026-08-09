@@ -13,6 +13,8 @@ import { initMediaInspector } from './media-inspector.js';
 import { initUrlHistory, recordAnalyzedUrl } from './url-history.js';
 import { initPreferencesPanel } from './preferences-panel.js';
 import { updatePreference } from './preferences.js';
+import { invertVisibleSelection, selectVisibleItems } from './selection.js';
+import { initGlobalShortcuts } from './keyboard-shortcuts.js';
 
 function initRouter() {
   initMediaInspector();
@@ -54,6 +56,11 @@ function initTheme() {
 }
 
 function setupEventListeners() {
+  const syncSelectionUI = () => {
+    updateAllCardSelections();
+    updateBatchActionsUI();
+  };
+
   // Theme Toggle
   const themeInput = document.getElementById('theme-toggle-input');
   if (themeInput) {
@@ -212,8 +219,19 @@ function setupEventListeners() {
         filteredIds.forEach(id => next.add(id));
       }
       store.state.selectedItemIds = next;
-      updateAllCardSelections();
-      updateBatchActionsUI();
+      syncSelectionUI();
+    });
+  }
+
+  const invertSelectBtn = document.getElementById('invert-select-btn');
+  if (invertSelectBtn) {
+    invertSelectBtn.addEventListener('click', () => {
+      store.state.selectedItemIds = invertVisibleSelection(
+        store.state.items,
+        getDisplayItems(),
+        store.state.selectedItemIds,
+      );
+      syncSelectionUI();
     });
   }
 
@@ -246,6 +264,27 @@ function setupEventListeners() {
       startZipDownload();
     });
   }
+
+  initGlobalShortcuts({
+    analyze: () => {
+      if (!store.state.isAnalyzing && urlInput?.value.trim()) analyzeForm?.requestSubmit();
+    },
+    selectVisible: () => {
+      store.state.selectedItemIds = selectVisibleItems(
+        store.state.items,
+        getDisplayItems(),
+        store.state.selectedItemIds,
+      );
+      syncSelectionUI();
+    },
+    clearSelection: () => {
+      store.state.selectedItemIds = new Set();
+      syncSelectionUI();
+    },
+    hasSelection: () => store.state.selectedItemIds.size > 0,
+    hasVisibleItems: () => getDisplayItems().length > 0,
+    startZip: startZipDownload,
+  });
 
   // Store Subscriptions for reactive updates
   store.subscribe((prop) => {

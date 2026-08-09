@@ -1,7 +1,6 @@
 docs/
 node_modules/
 temp_zips/
-tests/
 *.log
 *.err
 .env

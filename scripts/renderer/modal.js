@@ -1,5 +1,6 @@
 import { t } from '../i18n.js';
 import { sanitizeHtml } from '../utils.js';
+import { closeIconSvg } from '../icons.js';
 
 function trapFocus(container, e) {
   if (e.key === 'Escape') {
@@ -87,7 +88,7 @@ export function openPreviewModal(item) {
     <div class="modal-content" role="document">
       <div class="modal-header">
         <h3 id="modal-title">${sanitizeHtml(item.name)}</h3>
-        <button class="btn btn-icon close-modal-btn" data-focus-init data-i18n-aria-label="actions.close" data-i18n-title="actions.close" aria-label="${t('actions.close')}" title="${t('actions.close')}">&times;</button>
+        <button class="btn btn-icon icon-close-btn close-modal-btn" data-focus-init data-i18n-aria-label="actions.close" data-i18n-title="actions.close" aria-label="${t('actions.close')}" title="${t('actions.close')}">${closeIconSvg()}</button>
       </div>
       <div class="modal-body">
         ${bodyContent}

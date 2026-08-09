@@ -85,6 +85,8 @@
   "actions": {
     "select_all": "Selecionar Todos",
     "deselect_all": "Desmarcar Todos",
+    "invert_selection": "Inverter seleção",
+    "invert_selection_title": "Inverter a seleção das mídias filtradas",
     "download_selected": "Baixar Selecionados (ZIP)",
     "download": "Download",
     "select": "Selecionar",
@@ -182,6 +184,17 @@
   },
   "modal": {
     "unsupported_preview": "Visualização não suportada para este tipo de arquivo."
+  },
+  "shortcuts": {
+    "title": "Atalhos de teclado",
+    "subtitle": "Ações rápidas disponíveis fora de campos de texto.",
+    "open_help": "Ajuda de atalhos",
+    "analyze": "Analisar a URL informada",
+    "close_context": "Fechar modal ou painel; depois, limpar seleção",
+    "select_all": "Selecionar mídias filtradas",
+    "start_zip": "Iniciar ZIP quando houver seleção",
+    "show_help": "Abrir esta ajuda",
+    "ctrl_or_cmd": "Ctrl/Cmd"
   },
   "dl": {
     "pause": "Pausar",

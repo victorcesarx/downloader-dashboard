@@ -234,6 +234,12 @@ a:hover {
   padding: 6px 14px;
 }
 
+.shortcuts-help-btn {
+  min-width: 32px;
+  padding-inline: var(--ds-space-8);
+  font-weight: 700;
+}
+
 /* Tema claro: os tokens do Design System ainda sÃ£o dark-only;
    remapeia os usados pelo header para os valores claros do tema
    legado, mantendo a alternÃ¢ncia funcional. */
@@ -414,6 +420,65 @@ a:hover {
   background-color: var(--ds-surface-hover);
 }
 
+/* Close icon · Design System
+   O SVG elimina o desalinhamento óptico do caractere tipográfico × e mantém
+   a mesma área clicável, contraste e feedback em todos os contextos. */
+.icon-close-btn {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-md);
+  background: transparent;
+  color: var(--ds-text-secondary);
+  line-height: 0;
+  cursor: pointer;
+  transition:
+    color var(--ds-transition-base),
+    background-color var(--ds-transition-base),
+    border-color var(--ds-transition-base);
+}
+
+.icon-close-btn .close-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.icon-close-btn:hover {
+  color: var(--ds-danger);
+  background: var(--ds-danger-bg);
+  border-color: color-mix(in srgb, var(--ds-danger) 24%, transparent);
+}
+
+.icon-close-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-ring);
+}
+
+.icon-close-btn--sm {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: var(--ds-radius-sm);
+}
+
+.icon-close-btn--sm .close-icon {
+  width: 15px;
+  height: 15px;
+}
+
 .clear-cache-btn:hover {
   background: color-mix(in srgb, var(--ds-danger) 18%, transparent);
   border-color: var(--ds-danger);
@@ -459,13 +524,15 @@ a:hover {
    "Selecionar Todos" como ação leve (ghost) — fundo neutro, peso médio;
    "Baixar ZIP" como ação primária com corpo sólido. Mesmo eixo vertical
    do contador (align-items antercores em .selection-bar/.selection-actions). */
-#toggle-select-btn {
+#toggle-select-btn,
+#invert-select-btn {
   background-color: transparent;
   color: var(--ds-text-secondary);
   font-weight: 500;
 }
 
-#toggle-select-btn:hover {
+#toggle-select-btn:hover,
+#invert-select-btn:hover {
   background-color: var(--ds-bg-alt);
   color: var(--ds-text-primary);
 }
@@ -1410,6 +1477,12 @@ a:hover {
 .url-history-clear:hover,
 .url-history-actions button:hover { color: var(--ds-primary); }
 
+.url-history-actions .icon-close-btn:hover {
+  color: var(--ds-danger);
+  background: var(--ds-danger-bg);
+  border-color: color-mix(in srgb, var(--ds-danger) 24%, transparent);
+}
+
 .url-history-list { max-height: 310px; overflow-y: auto; }
 
 .url-history-item {
@@ -1770,27 +1843,7 @@ a:hover {
 }
 
 .close-modal-btn {
-  background: none;
-  border: none;
-  color: var(--ds-text-secondary);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: var(--ds-space-4) var(--ds-space-8);
-  border-radius: var(--ds-radius-sm);
-  transition: color var(--ds-transition-base), background-color var(--ds-transition-base);
-  flex-shrink: 0;
   margin-left: var(--ds-space-12);
-}
-
-.close-modal-btn:hover {
-  color: var(--ds-danger);
-  background: var(--ds-danger-bg);
-}
-
-.close-modal-btn:focus-visible {
-  outline: none;
-  box-shadow: var(--ds-ring);
 }
 
 .modal-body {
@@ -2002,6 +2055,72 @@ a:hover {
 /* Download Queue Panel — Drawer lateral off-canvas (direita) */
 .queue-toggle-btn {
   position: relative;
+}
+
+.shortcuts-help-content {
+  max-width: 560px;
+}
+
+.shortcuts-help-content .modal-body {
+  display: block;
+  min-height: 0;
+}
+
+.shortcuts-help-intro {
+  margin: 0 0 var(--ds-space-16);
+  color: var(--ds-text-secondary);
+}
+
+.shortcuts-list {
+  display: grid;
+  gap: var(--ds-space-12);
+  margin: 0;
+}
+
+.shortcuts-row {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) 1fr;
+  align-items: center;
+  gap: var(--ds-space-16);
+  padding-bottom: var(--ds-space-12);
+  border-bottom: 1px solid var(--ds-border-subtle);
+}
+
+.shortcuts-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.shortcuts-row dt,
+.shortcuts-row dd {
+  margin: 0;
+}
+
+.shortcuts-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-4);
+}
+
+.shortcuts-keys kbd {
+  min-width: 28px;
+  padding: 3px 7px;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-alt);
+  color: var(--ds-text-primary);
+  font: inherit;
+  font-size: var(--ds-font-size-xs);
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 1px 0 var(--ds-border-strong);
+}
+
+@media (max-width: 560px) {
+  .shortcuts-row {
+    grid-template-columns: 1fr;
+    gap: var(--ds-space-8);
+  }
 }
 
 .queue-toggle-btn:hover,
@@ -2427,31 +2546,7 @@ a:hover {
 }
 
 .queue-panel-close {
-  background: none;
-  border: none;
-  color: var(--ds-text-secondary);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--ds-radius-sm);
-  transition: color var(--ds-transition-base), background-color var(--ds-transition-base);
-  flex-shrink: 0;
-}
-
-.queue-panel-close:hover {
-  color: var(--ds-danger);
-  background: var(--ds-danger-bg);
-}
-
-.queue-panel-close:focus-visible {
-  outline: none;
-  box-shadow: var(--ds-ring);
+  margin: 0;
 }
 
 .queue-panel-header h4 {

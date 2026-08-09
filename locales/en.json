@@ -85,6 +85,8 @@
   "actions": {
     "select_all": "Select All",
     "deselect_all": "Deselect All",
+    "invert_selection": "Invert selection",
+    "invert_selection_title": "Invert the selection of filtered media",
     "download_selected": "Download Selected (ZIP)",
     "download": "Download",
     "select": "Select",
@@ -182,6 +184,17 @@
   },
   "modal": {
     "unsupported_preview": "Preview not supported for this file type."
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "subtitle": "Quick actions available outside text fields.",
+    "open_help": "Keyboard shortcut help",
+    "analyze": "Analyze the entered URL",
+    "close_context": "Close a modal or panel; then clear selection",
+    "select_all": "Select filtered media",
+    "start_zip": "Start a ZIP when media is selected",
+    "show_help": "Open this help",
+    "ctrl_or_cmd": "Ctrl/Cmd"
   },
   "dl": {
     "pause": "Pause",

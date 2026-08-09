@@ -1,6 +1,6 @@
 # WebScope — Roadmap de Qualidade e Evolução
 
-Atualizado em: 08/08/2026 — itens 1 a 6 e 8 a 12 concluídos; item 7 ignorado
+Atualizado em: 08/08/2026 — itens 1 a 6 e 8 a 14 concluídos; item 7 ignorado
 
 Este arquivo é a fonte única de verdade para as próximas etapas. Os itens
 devem ser executados em ordem. Uma etapa só pode ser marcada como concluída
@@ -300,19 +300,69 @@ Critério de aceitação: toda tarefa ZIP informa claramente o resultado de cada
 arquivo, permite aproveitar sucessos parciais, repetir somente falhas e exportar
 o diagnóstico sem conservar o arquivo temporário além do necessário.
 
-### [ ] 13. Seleção invertida
+### [x] 13. Seleção invertida
 
 - Inverter somente os itens filtrados/visíveis.
 - Respeitar exclusividade entre variantes do mesmo grupo.
 - Atualizar total, ZIP e estados dos cards sem re-render desnecessário.
 
-### [ ] 14. Atalhos globais seguros
+Implementado:
+
+- Ação dedicada na barra de seleção, traduzida em PT-BR/EN.
+- Inversão baseada na lista já filtrada, pesquisada, ordenada e colapsada.
+- Seleções fora do filtro atual permanecem intactas.
+- Ao selecionar um representante, outras variantes do grupo são removidas.
+- Cards comuns e virtualizados, contador, tamanho total e botão ZIP são
+  sincronizados incrementalmente, sem reconstruir a grade.
+- Testes para filtro, seleção externa, variantes e lista visível vazia.
+
+Critério de aceitação: inverter a seleção afeta somente os resultados exibidos,
+preserva itens fora do filtro e nunca mantém duas variantes do mesmo grupo.
+
+### [x] 14. Atalhos globais seguros
 
 - Ctrl/Cmd+Enter: analisar.
 - Escape: fechar modal/painel ou limpar seleção conforme contexto.
 - Ctrl/Cmd+A: selecionar itens somente fora de campos de texto.
 - Atalho para iniciar ZIP somente quando houver seleção.
 - Tela de ajuda com todos os atalhos.
+
+Implementado:
+
+- `Ctrl/Cmd+Enter` envia o formulário somente quando há URL e nenhuma análise ativa.
+- `Escape` respeita a prioridade modal, painel e seleção, sem apagar seleção
+  enquanto o foco está em um campo editável.
+- `Ctrl/Cmd+A` seleciona os resultados filtrados fora de inputs, textareas,
+  selects e regiões editáveis, preservando exclusividade entre variantes.
+- `Alt+Z` inicia o fluxo ZIP apenas quando existe mídia selecionada e nenhum
+  modal ou painel está bloqueando o contexto.
+- `?` e um botão acessível no cabeçalho abrem uma ajuda traduzida com todos
+  os atalhos; a ajuda acompanha mudanças de idioma enquanto está aberta.
+- Ações globais, exceto Escape, ficam suspensas durante modais e painéis.
+- Testes para Windows/macOS, campos editáveis, ausência de resultados,
+  prioridade do Escape, bloqueio contextual, ZIP e ajuda.
+
+Critério de aceitação: atalhos nunca substituem edição de texto ou ações do
+navegador fora do contexto previsto e produzem a mesma atualização da interface
+que seus controles visuais equivalentes.
+
+### [x] Ajuste visual — padronizar controles de fechar
+
+- Substituir o caractere tipográfico `×` por um SVG compartilhado e simétrico.
+- Unificar caixa clicável, centralização, raio, contraste, hover e foco.
+- Aplicar a modais, fila, preferências, Inspector e remoção do histórico de URLs.
+
+Implementado:
+
+- Componente compartilhado de 40 px com ícone de 18 px e variante compacta de
+  30 px com ícone de 15 px para ações dentro de listas.
+- Centralização geométrica independente das métricas da fonte.
+- Hover destrutivo sutil com tokens de perigo e anel de foco do design system.
+- Mesmo comportamento nos temas claro/escuro e em desktop/mobile.
+- Teste de regressão impede o retorno de `×`/`&times;` nesses controles.
+
+Critério de aceitação: todos os ícones de fechar permanecem visualmente
+centralizados e usam o mesmo contrato de interação do design system.
 
 ---
 

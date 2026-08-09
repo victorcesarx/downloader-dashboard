@@ -7,6 +7,7 @@ import { downloadSingleItem } from './download.js';
 import { openPreviewModal } from './renderer/modal.js';
 import { updateAllCardSelections, updateBatchActionsUI } from './renderer/batch.js';
 import { Toast } from './utils.js';
+import { closeIconSvg } from './icons.js';
 
 let panel = null;
 let currentItem = null;
@@ -150,7 +151,7 @@ function render() {
   panel.innerHTML = `
     <header class="queue-panel-header inspector-header">
       <div class="queue-panel-heading"><h4 id="media-inspector-title">${t('inspector.title')}</h4><span class="queue-panel-subtext">${sanitizeHtml(item.name)}</span></div>
-      <button class="queue-panel-close inspector-close" type="button" aria-label="${t('actions.close')}">×</button>
+      <button class="queue-panel-close icon-close-btn inspector-close" type="button" aria-label="${t('actions.close')}" title="${t('actions.close')}">${closeIconSvg()}</button>
     </header>
     <div class="inspector-body">
       <div class="inspector-preview">${previewHtml(item)}</div>

@@ -2,6 +2,7 @@ import { loadLocale, onLocaleChange, t } from './i18n.js';
 import { getPreferences, resetPreferences, resolvedTheme, subscribePreferences, updatePreference } from './preferences.js';
 import { store } from './state.js';
 import { closeRightPanel, getActiveRightPanel, setOnRightPanelChange, toggleRightPanel } from './right-panel.js';
+import { closeIconSvg } from './icons.js';
 
 let panel = null;
 let initialized = false;
@@ -25,7 +26,7 @@ function render() {
   panel.innerHTML = `
     <header class="queue-panel-header preferences-header">
       <div class="queue-panel-heading"><h4 id="preferences-title">${t('preferences.title')}</h4><span class="queue-panel-subtext">${t('preferences.subtitle')}</span></div>
-      <button class="queue-panel-close preferences-close" type="button" aria-label="${t('actions.close')}">×</button>
+      <button class="queue-panel-close icon-close-btn preferences-close" type="button" aria-label="${t('actions.close')}" title="${t('actions.close')}">${closeIconSvg()}</button>
     </header>
     <div class="preferences-body">
       <section class="preferences-section"><h5>${t('preferences.appearance')}</h5>

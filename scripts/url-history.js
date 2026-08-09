@@ -1,5 +1,6 @@
 import { onLocaleChange, t } from './i18n.js';
 import { Toast, sanitizeHtml } from './utils.js';
+import { closeIconSvg } from './icons.js';
 
 export const URL_HISTORY_KEY = 'webscope_url_history_v1';
 export const URL_HISTORY_LIMIT_KEY = 'webscope_url_history_limit';
@@ -84,7 +85,7 @@ function render() {
           <div class="url-history-actions">
             <button type="button" data-history-action="pin" title="${t(entry.pinned ? 'history.unpin' : 'history.pin')}">${entry.pinned ? '★' : '☆'}</button>
             <button type="button" data-history-action="copy" title="${t('actions.copy_link')}">⧉</button>
-            <button type="button" data-history-action="remove" title="${t('history.remove')}">×</button>
+            <button class="icon-close-btn icon-close-btn--sm" type="button" data-history-action="remove" aria-label="${t('history.remove')}" title="${t('history.remove')}">${closeIconSvg()}</button>
           </div>
         </div>`).join('') : `<div class="url-history-empty">${t('history.empty')}</div>`}
     </div>`;

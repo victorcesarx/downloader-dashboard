@@ -5,6 +5,7 @@ import { store } from './state.js';
 import { getActiveRightPanel, setOnRightPanelChange, closeRightPanel, toggleRightPanel } from './right-panel.js';
 import { getZipQueueTasks, subscribeZipQueue } from './zip-queue.js';
 import { cancelZipTask, dismissZipTask, downloadZipResult, exportZipReport, retryZipFailures } from './zip-download.js';
+import { closeIconSvg } from './icons.js';
 
 let panel = null;
 let badge = null;
@@ -129,7 +130,7 @@ function getOrCreatePanel() {
       </div>
       <div class="queue-panel-header-actions">
         <button class="btn btn-secondary btn-sm queue-clear-done" style="display:none;"></button>
-        <button class="queue-panel-close btn btn-icon" aria-label="${t('actions.close')}" title="${t('actions.close')}">&times;</button>
+        <button class="queue-panel-close btn btn-icon icon-close-btn" aria-label="${t('actions.close')}" title="${t('actions.close')}">${closeIconSvg()}</button>
       </div>
     </div>
     <div class="queue-tabs" role="tablist">

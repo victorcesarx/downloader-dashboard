@@ -39,6 +39,7 @@ function render() {
       <section class="preferences-section"><h5>${t('preferences.downloads')}</h5>
         <label class="preferences-field"><span><strong>${t('preferences.sound')}</strong><small>${t('preferences.sound_hint')}</small></span><span class="toggle-switch"><input class="toggle-switch-input" data-pref="soundEnabled" type="checkbox" ${prefs.soundEnabled ? 'checked' : ''}><span class="toggle-switch-slider" aria-hidden="true"></span></span></label>
         <label class="preferences-field"><span><strong>${t('preferences.notifications')}</strong><small>${t('preferences.notifications_hint')}</small></span><span class="toggle-switch"><input class="toggle-switch-input" data-pref="notificationsEnabled" type="checkbox" ${prefs.notificationsEnabled ? 'checked' : ''}><span class="toggle-switch-slider" aria-hidden="true"></span></span></label>
+        <label class="preferences-field"><span><strong>${t('preferences.favicon_badge')}</strong><small>${t('preferences.favicon_badge_hint')}</small></span><span class="toggle-switch"><input class="toggle-switch-input" data-pref="faviconBadgeEnabled" type="checkbox" ${prefs.faviconBadgeEnabled ? 'checked' : ''}><span class="toggle-switch-slider" aria-hidden="true"></span></span></label>
         <label class="preferences-field"><span>${t('preferences.quality')}</span><select data-pref="preferredQuality">${selectOptions([
           ['best', t('preferences.quality_best')], ['1080p', '1080p'], ['720p', '720p'], ['480p', '480p']
         ], prefs.preferredQuality)}</select></label>
@@ -75,6 +76,7 @@ async function applyPreference(prefs, key) {
   } else if (key === 'thumbBlurred') store.state.thumbBlurred = prefs.thumbBlurred;
   else if (key === 'soundEnabled') store.state.soundEnabled = prefs.soundEnabled;
   else if (key === 'notificationsEnabled') store.state.notificationsEnabled = prefs.notificationsEnabled;
+  else if (key === 'faviconBadgeEnabled') store.state.faviconBadgeEnabled = prefs.faviconBadgeEnabled;
   else if (key === 'preferredQuality') store.state.preferredQuality = prefs.preferredQuality;
   else if (key === 'downloadConcurrency') store.state.downloadConcurrency = prefs.downloadConcurrency;
   else if (key === 'historyRetention') store.state.historyRetention = prefs.historyRetention;

@@ -6,6 +6,7 @@ import zlib from 'zlib';
 import dns from 'dns';
 
 import { runZipTask, zipTasks, cleanupZipTask } from '../../server/zip.js';
+import { resetGoFileSessionForTests } from '../../server/scrapers/gofile.js';
 
 // Apenas a API pública de runZipTask é exercitada; o fetch global é mockado,
 // o diretório temporário é isolado e nenhuma chamada de rede real acontece.
@@ -37,8 +38,27 @@ function okResponse(chunks = [Buffer.from('payload')]) {
   return new Response(chunkedBody(chunks), { status: 200 });
 }
 
+function slowActiveResponse(chunks, intervalMs) {
+  return new Response(new ReadableStream({
+    async start(controller) {
+      for (const chunk of chunks) {
+        await new Promise(resolve => setTimeout(resolve, intervalMs));
+        controller.enqueue(new Uint8Array(chunk));
+      }
+      controller.close();
+    }
+  }), { status: 200 });
+}
+
 function errorResponse(status = 404) {
   return new Response(null, { status });
+}
+
+function jsonErrorResponse(status, payload) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 // Resposta 3xx com header Location (o fetch usa redirect: 'manual').
@@ -167,7 +187,8 @@ describe('runZipTask()', () => {
     vi.spyOn(dns, 'lookup').mockImplementation((hostname, options, callback) => {
       const h = String(hostname).replace(/^\[|\]$/g, '');
       const isV6 = h.includes(':');
-      const address = isV6 ? h : '93.184.216.34';
+      const isLocal = h === 'localhost' || h === '127.0.0.1';
+      const address = isV6 || isLocal ? (h === 'localhost' ? '127.0.0.1' : h) : '93.184.216.34';
       process.nextTick(() => callback(null, [{ address, family: isV6 ? 6 : 4 }]));
     });
   });
@@ -179,6 +200,7 @@ describe('runZipTask()', () => {
     if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    resetGoFileSessionForTests();
   });
 
   it('completes with status "completed" for a single valid file', async () => {
@@ -214,6 +236,63 @@ describe('runZipTask()', () => {
     expect(entries[0].name).toBe('secretbin');
     expect(entries[0].name).not.toMatch(/\.\.|\\|\//);
     expect(Buffer.compare(entries[0].content, Buffer.from('secretdata'))).toBe(0);
+  });
+
+  it('preserves payload order when concurrent downloads finish out of order', async () => {
+    const delays = { 'first.txt': 40, 'second.txt': 5, 'third.txt': 15 };
+    const items = Object.keys(delays).map(name => ({
+      name,
+      url: `https://cdn.example.com/${name}`,
+      ext: 'txt',
+    }));
+    const { taskId } = await runTask(items, async url => {
+      const name = new URL(url).pathname.slice(1);
+      await new Promise(resolve => setTimeout(resolve, delays[name]));
+      return okResponse([Buffer.from(name)]);
+    });
+
+    const entries = readZipEntries(path.join(tempDir, `${taskId}.zip`));
+    expect(entries.map(entry => entry.name)).toEqual(['first.txt', 'second.txt', 'third.txt']);
+  });
+
+  it('identifies Pixeldrain hotlink protection instead of exposing a generic 403', async () => {
+    const { task, fetchMock } = await runTask(
+      [{ name: 'blocked.bin', url: 'https://pixeldrain.com/api/file/blocked', ext: 'bin' }],
+      () => jsonErrorResponse(403, { value: 'file_rate_limited_captcha_required' }),
+    );
+
+    expect(task.itemResults[0]).toMatchObject({
+      outcome: 'failed',
+      reason: 'PIXELDRAIN_HOTLINK_PROTECTION',
+      httpStatus: 403,
+    });
+    expect(fetchMock.mock.calls[0][1].headers.Referer).toBe('https://pixeldrain.com/');
+  });
+
+  it('authenticates GoFile CDN downloads with the scraper session', async () => {
+    const { taskId, task, fetchMock } = await runTask(
+      [{ name: '01.jpg', url: 'https://store1.gofile.io/download/one', ext: 'jpg', source: 'gofile', mimeType: 'image/jpeg' }],
+      (url) => url === 'https://api.gofile.io/accounts'
+        ? new Response(JSON.stringify({ status: 'ok', data: { token: 'zip-token' } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        : new Response(chunkedBody([Buffer.from('real-image-bytes')]), { status: 200, headers: { 'Content-Type': 'image/jpeg' } }),
+    );
+
+    expect(task.itemResults[0].outcome).toBe('completed');
+    const cdnCall = fetchMock.mock.calls.find(([url]) => String(url).includes('store1.gofile.io'));
+    expect(cdnCall[1].headers.Cookie).toBe('accountToken=zip-token');
+    expect(readZipEntries(path.join(tempDir, `${taskId}.zip`))[0].content.toString()).toBe('real-image-bytes');
+  });
+
+  it('does not archive a GoFile access payload returned with HTTP 200', async () => {
+    const { taskId, task } = await runTask(
+      [{ name: '01.jpg', url: 'https://store1.gofile.io/download/one', ext: 'jpg', source: 'gofile', mimeType: 'image/jpeg' }],
+      (url) => url === 'https://api.gofile.io/accounts'
+        ? new Response(JSON.stringify({ status: 'ok', data: { token: 'zip-token' } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        : new Response(JSON.stringify({ status: 'error-notAuthenticated' }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    );
+
+    expect(task.itemResults[0]).toMatchObject({ outcome: 'failed', reason: 'GOFILE_DOWNLOAD_ACCESS_DENIED' });
+    expect(readZipEntries(path.join(tempDir, `${taskId}.zip`))).toHaveLength(0);
   });
 
   it('updates processed and total correctly', async () => {
@@ -635,6 +714,25 @@ describe('runZipTask()', () => {
     const entries = readZipEntries(path.join(tempDir, `${taskId}.zip`));
     expect(entries).toHaveLength(1);
     expect(Buffer.compare(entries[0].content, Buffer.from('recovered-after-timeout'))).toBe(0);
+  });
+
+  it('does not abort a long download while data continues to arrive', async () => {
+    const chunks = [Buffer.from('one'), Buffer.from('two'), Buffer.from('three')];
+    const { taskId, task, fetchMock } = await runTask(
+      [{ name: 'slow.mp4', url: 'https://v.erome.com/slow.mp4', ext: 'mp4' }],
+      () => slowActiveResponse(chunks, 25),
+      { fetchTimeoutMs: 40, retryDelayMs: 5 }
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
+      Referer: 'https://www.erome.com/',
+      Origin: 'https://www.erome.com',
+      'Accept-Encoding': 'identity',
+    });
+    expect(task.status).toBe('completed');
+    expect(task.error).toBeNull();
+    expect(readZipEntries(path.join(tempDir, `${taskId}.zip`))[0].content.toString()).toBe('onetwothree');
   });
 
   it('marks the item as failed after retries are exhausted, without erroring the whole task', async () => {

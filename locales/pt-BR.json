@@ -53,6 +53,8 @@
     "sound_hint": "Avisa quando o arquivo terminar",
     "notifications": "Notificações do sistema",
     "notifications_hint": "Mostra um aviso fora da aba",
+    "favicon_badge": "Progresso no favicon",
+    "favicon_badge_hint": "Mostra a quantidade de downloads ativos na aba",
     "quality": "Qualidade preferida",
     "quality_best": "Melhor disponível",
     "concurrency": "Downloads simultâneos",
@@ -160,6 +162,12 @@
     "start_error": "Falha ao iniciar empacotamento ZIP",
     "task_error": "Task cancelada ou com erro",
     "rename_label": "Nomeie seu arquivo ZIP",
+    "organize_title": "Organizar arquivos do ZIP",
+    "organize_hint": "Arraste os arquivos ou use Alt + setas para definir a ordem final.",
+    "organize_list": "Ordem dos arquivos no ZIP",
+    "organize_moved": "{name} movido para a posição {position}.",
+    "move_up": "Mover arquivo para cima",
+    "move_down": "Mover arquivo para baixo",
     "start": "Iniciar ZIP",
     "report_title": "Relatório do ZIP",
     "report_summary": "Relatório: {completed} concluído(s), {failed} falho(s), {ignored} ignorado(s)",
@@ -170,10 +178,12 @@
     "retry_failed": "Tentar falhas ({count})",
     "retry_started": "Nova tarefa criada para {count} arquivo(s) com falha.",
     "retry_error": "Não foi possível tentar novamente os arquivos com falha.",
-    "export_json": "Exportar JSON",
+    "cancel": "Cancelar ZIP",
+    "cancel_error": "Não foi possível cancelar e remover o ZIP.",
     "export_text": "Exportar texto",
     "reason_unsupported_hls": "Streaming HLS não é suportado em ZIP",
     "reason_unsupported_dash": "Streaming DASH não é suportado em ZIP",
+    "reason_pixeldrain_hotlink": "O Pixeldrain bloqueou o download direto deste arquivo por proteção contra hotlink. Abra o arquivo no Pixeldrain para verificar o acesso.",
     "error": {
       "queue_full": "A fila de downloads está cheia. Tente novamente mais tarde.",
       "ip_limit": "Você já possui muitas tarefas ZIP em andamento.",
@@ -183,7 +193,14 @@
     }
   },
   "modal": {
-    "unsupported_preview": "Visualização não suportada para este tipo de arquivo."
+    "unsupported_preview": "Visualização não suportada para este tipo de arquivo.",
+    "previous": "Mídia anterior",
+    "next": "Próxima mídia",
+    "audio_waveform": "Forma de onda do áudio em reprodução",
+    "waveform_fallback": "A forma de onda não está disponível; use os controles do player."
+  },
+  "quality": {
+    "choose": "Qualidade"
   },
   "shortcuts": {
     "title": "Atalhos de teclado",

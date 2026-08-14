@@ -21,6 +21,7 @@ const initialState = {
   activeZipTask: null,
   soundEnabled: preferences.soundEnabled,
   notificationsEnabled: preferences.notificationsEnabled,
+  faviconBadgeEnabled: preferences.faviconBadgeEnabled,
   preferredQuality: preferences.preferredQuality,
   downloadConcurrency: preferences.downloadConcurrency,
   historyRetention: preferences.historyRetention,

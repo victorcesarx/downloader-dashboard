@@ -33,8 +33,13 @@ function loadEnvFile() {
 loadEnvFile();
 
 export const PORT = parseInt(process.env.PORT, 10) || 3006;
-export const TEMP_DIR = path.join(__dirname, '..', 'temp_zips');
+export const TEMP_DIR = process.env.TEMP_DIR
+  ? path.resolve(process.env.TEMP_DIR)
+  : path.join(__dirname, '..', 'temp_zips');
 export const AUTH_TOKEN = process.env.DOWNDASH_TOKEN || null;
+export const GOFILE_TOKEN = process.env.GOFILE_TOKEN || null;
+export const GOFILE_WT_SALT = process.env.GOFILE_WT_SALT || '12af056dacea0b';
+export const GOFILE_WT_SALT_OVERRIDE = Boolean(process.env.GOFILE_WT_SALT?.trim());
 
 export const RATE_LIMIT_WINDOW = 60_000;
 export const RATE_LIMIT_MAX = 20;

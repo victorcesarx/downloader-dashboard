@@ -1,3 +1,5 @@
+import { getGoFileDownloadHeaders, isGoFileUrl } from './scrapers/gofile.js';
+
 export const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -9,6 +11,8 @@ export const MIME_TYPES = {
   '.gif': 'image/gif',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.map': 'application/json; charset=utf-8',
+  '.woff2': 'font/woff2',
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
   '.mp3': 'audio/mpeg'
@@ -29,6 +33,8 @@ export const CACHE_DURATIONS = {
   '.gif': 'max-age=86400',
   '.svg': 'max-age=86400',
   '.ico': 'max-age=86400',
+  '.map': 'no-cache',
+  '.woff2': 'max-age=86400',
   '.mp4': 'max-age=3600',
   '.webm': 'max-age=3600',
   '.mp3': 'max-age=3600'
@@ -119,19 +125,34 @@ export async function enrichItemSizes(items) {
   const todo = items.filter(i => !i.size && i.url);
   if (todo.length === 0) return;
   console.log(`[Sizes] Fetching sizes for ${todo.length} item(s)`);
-  const fetchSize = async (url) => {
+  const fetchSize = async (itemOrUrl) => {
+    const item = typeof itemOrUrl === 'string' ? { url: itemOrUrl } : itemOrUrl;
+    const url = item.url;
     for (const method of ['HEAD', 'GET']) {
       try {
-        const headers = { 'User-Agent': 'Mozilla/5.0' };
+        const headers = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+          'Accept-Encoding': 'identity'
+        };
+        // Erome's media CDN rejects metadata requests without hotlink headers.
+        if (url.includes('erome.com')) {
+          headers['Referer'] = 'https://www.erome.com/';
+          headers['Origin'] = 'https://www.erome.com';
+        }
+        if (item.source === 'gofile' || isGoFileUrl(url)) {
+          Object.assign(headers, await getGoFileDownloadHeaders());
+        }
         if (method === 'GET') headers['Range'] = 'bytes=0-0';
         const res = await fetch(url, { method, headers, signal: AbortSignal.timeout(5000) });
-        const cl = res.headers.get('content-length');
-        if (cl) return parseInt(cl, 10);
+        // For a ranged GET, Content-Length is normally 1; the complete file
+        // size is the total after the slash in Content-Range.
         const cr = res.headers.get('content-range');
         if (cr) {
           const m = cr.match(/\/(\d+)$/);
           if (m) return parseInt(m[1], 10);
         }
+        const cl = res.headers.get('content-length');
+        if (cl) return parseInt(cl, 10);
       } catch (e) {
         console.log(`[Sizes] ${method} failed for ${url.substring(0, 80)}: ${e.message}`);
       }
@@ -139,7 +160,7 @@ export async function enrichItemSizes(items) {
     return 0;
   };
   await Promise.allSettled(todo.map(async (item) => {
-    const size = await fetchSize(item.url);
+    const size = await fetchSize(item);
     if (size) {
       item.size = size;
       console.log(`[Sizes] ${item.name || 'item'}: ${(size / 1024 / 1024).toFixed(1)} MB`);
@@ -149,7 +170,7 @@ export async function enrichItemSizes(items) {
     if (item.qualities) {
       await Promise.allSettled(item.qualities.map(async (q) => {
         if (q.size) return;
-        const qs = await fetchSize(q.url);
+        const qs = await fetchSize({ ...q, source: q.source || item.source });
         if (qs) q.size = qs;
       }));
     }

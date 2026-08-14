@@ -9,7 +9,8 @@ const labels = {
     title: 'Preferências', subtitle: 'Configurações do WebScope', appearance: 'Aparência', theme: 'Tema',
     theme_system: 'Sistema', theme_dark: 'Escuro', theme_light: 'Claro', language: 'Idioma', nsfw: 'NSFW',
     nsfw_hint: 'Miniaturas', downloads: 'Downloads', sound: 'Som', sound_hint: 'Aviso', notifications: 'Notificações',
-    notifications_hint: 'Fora da aba', quality: 'Qualidade', quality_best: 'Melhor disponível', concurrency: 'Simultâneos',
+    notifications_hint: 'Fora da aba', favicon_badge: 'Progresso no favicon', favicon_badge_hint: 'Downloads ativos na aba',
+    quality: 'Qualidade', quality_best: 'Melhor disponível', concurrency: 'Simultâneos',
     concurrency_hint: 'Conexão', history: 'Histórico', retention: 'Registros', retention_hint: 'Sessão', reset: 'Restaurar padrões',
     autosave: 'Salvo automaticamente',
   },
@@ -30,8 +31,8 @@ describe('painel de preferências', () => {
     const panel = document.getElementById('preferences-panel');
     expect(panel.classList.contains('open')).toBe(true);
     expect(panel.textContent).toContain('Configurações do WebScope');
-    expect(panel.querySelectorAll('.toggle-switch')).toHaveLength(3);
-    expect(panel.querySelectorAll('input[type="checkbox"].toggle-switch-input')).toHaveLength(3);
+    expect(panel.querySelectorAll('.toggle-switch')).toHaveLength(4);
+    expect(panel.querySelectorAll('input[type="checkbox"].toggle-switch-input')).toHaveLength(4);
     expect(panel.querySelectorAll('.toggle-switch--theme')).toHaveLength(0);
 
     const soundToggle = panel.querySelector('[data-pref="soundEnabled"]');
@@ -39,6 +40,12 @@ describe('painel de preferências', () => {
     soundToggle.dispatchEvent(new Event('change'));
     expect(panel.querySelector('[data-pref="soundEnabled"]')).toBe(soundToggle);
     expect(soundToggle.checked).toBe(true);
+
+    const faviconToggle = panel.querySelector('[data-pref="faviconBadgeEnabled"]');
+    expect(faviconToggle.checked).toBe(true);
+    faviconToggle.checked = false;
+    faviconToggle.dispatchEvent(new Event('change'));
+    expect(store.state.faviconBadgeEnabled).toBe(false);
 
     const concurrency = panel.querySelector('[data-pref="downloadConcurrency"]');
     concurrency.value = '5';

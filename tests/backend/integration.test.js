@@ -6,7 +6,8 @@ import path from 'path';
 import dns from 'dns';
 import { Readable } from 'stream';
 import { server, zipTasks, zipTaskQueue } from '../../server.js';
-import { ZIP_MAX_ITEMS } from '../../server/config.js';
+import { zipRetryReports } from '../../server/zip.js';
+import { TEMP_DIR, ZIP_MAX_ITEMS } from '../../server/config.js';
 
 let baseUrl;
 let zipTempDir = null;
@@ -90,6 +91,31 @@ afterAll(() => {
 });
 
 describe('Static file serving', () => {
+  it('exposes an uncached healthcheck without sensitive paths', async () => {
+    const res = await request('GET', '/health');
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    const body = JSON.parse(res.body);
+    expect(body).toMatchObject({ status: 'ok', checks: { tempWritable: true } });
+    expect(body).toHaveProperty('uptimeSeconds');
+    expect(res.body).not.toContain(TEMP_DIR);
+    expect(res.headers['x-request-id']).toMatch(/^[a-f0-9-]{36}$/);
+  });
+
+  it('preserves a valid request ID and exposes safe Prometheus metrics', async () => {
+    const health = await request('GET', '/health', null, { headers: { 'X-Request-ID': 'client-request-123' } });
+    expect(health.headers['x-request-id']).toBe('client-request-123');
+
+    const res = await request('GET', '/metrics');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/plain');
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.body).toContain('webscope_http_requests_total');
+    expect(res.body).toContain('webscope_process_uptime_seconds');
+    expect(res.body).not.toContain('client-request-123');
+    expect(res.body).not.toContain(TEMP_DIR);
+  });
+
   it('serves index.html on GET /', async () => {
     const res = await request('GET', '/');
     expect(res.status).toBe(200);
@@ -431,7 +457,7 @@ describe('POST /download-zip queue integration', () => {
     await waitFor(() => zipTasks.get(secondId)?.status === 'processing');
   });
 
-  it('rota de cancelamento marca tarefa queued como cancelled', async () => {
+  it('rota de cancelamento remove completamente uma tarefa queued', async () => {
     const activeId = await postZip();
     await waitFor(() => zipTasks.get(activeId)?.status === 'processing');
     await waitFor(() => gates.length > 0);
@@ -441,18 +467,14 @@ describe('POST /download-zip queue integration', () => {
 
     const res = await request('GET', `/download-zip/cancel/${queuedId}`);
     expect(res.status).toBe(200);
-    expect(JSON.parse(res.body).cancelled).toBe(true);
-
-    const cancelledTask = zipTasks.get(queuedId);
-    expect(cancelledTask.status).toBe('cancelled');
-    expect(cancelledTask.finishedAt).not.toBeNull();
-    expect(fs.existsSync(cancelledTask.zipFilePath)).toBe(false);
+    expect(JSON.parse(res.body)).toEqual({ cancelled: true, removed: true });
+    expect(zipTasks.has(queuedId)).toBe(false);
 
     // Mesmo que a ativa termine, a tarefa cancelada nunca entra em processing.
     releaseAll();
     await waitFor(() => zipTasks.get(activeId)?.status === 'completed');
     await new Promise((r) => setTimeout(r, 50));
-    expect(zipTasks.get(queuedId)?.status).toBe('cancelled');
+    expect(zipTasks.has(queuedId)).toBe(false);
   });
 
   it('endpoint de status retorna queuePosition', async () => {
@@ -469,9 +491,7 @@ describe('POST /download-zip queue integration', () => {
 
     await request('GET', `/download-zip/cancel/${queuedId}`);
     res = await request('GET', `/download-zip/status/${queuedId}`);
-    const body = JSON.parse(res.body);
-    expect(body.status).toBe('cancelled');
-    expect(body.queuePosition).toBeNull();
+    expect(res.status).toBe(404);
   });
 
   it('endpoint de status expõe resultados concluídos e ignorados por arquivo', async () => {
@@ -647,7 +667,7 @@ describe('POST /download-zip queue integration', () => {
     // ativa concluir para a fila esvaziar.
     const res = await request('GET', `/download-zip/cancel/${second}`);
     expect(JSON.parse(res.body).cancelled).toBe(true);
-    expect(zipTasks.get(second)?.status).toBe('cancelled');
+    expect(zipTasks.has(second)).toBe(false);
 
     releaseAll();
     await waitFor(() => zipTaskQueue.activeCount === 0 && zipTaskQueue.waitingCount === 0);
@@ -675,6 +695,19 @@ describe('GET /download-zip/result cleanup', () => {
 
     await waitFor(() => !fs.existsSync(zipFilePath));
     expect(fs.existsSync(zipFilePath)).toBe(false);
+  });
+
+  it('cancelamento após a conclusão remove arquivo, tarefa e relatório de retry', async () => {
+    const { taskId, zipFilePath } = seedZipTask(1024);
+    zipRetryReports.set(taskId, { savedAt: Date.now(), itemResults: [{ outcome: 'failed' }] });
+
+    const res = await request('GET', `/download-zip/cancel/${taskId}`);
+
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ cancelled: true, removed: true });
+    expect(fs.existsSync(zipFilePath)).toBe(false);
+    expect(zipTasks.has(taskId)).toBe(false);
+    expect(zipRetryReports.has(taskId)).toBe(false);
   });
 
   it('removes the task from zipTasks when the client disconnects mid-download', async () => {

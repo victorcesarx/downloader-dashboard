@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Scope sobre documento</title>
+  <desc id="desc">Documento violeta com canto dobrado atrás de uma mira óptica compacta.</desc>
+  <path fill="#7C3AED" stroke="#24114F" stroke-linejoin="round" stroke-width="8" d="M43 23h104l48 48v155a10 10 0 0 1-10 10H43a10 10 0 0 1-10-10V33a10 10 0 0 1 10-10Z"/>
+  <path fill="#C4B5FD" stroke="#24114F" stroke-linejoin="round" stroke-width="8" d="M147 23v48h48Z"/>
+  <circle cx="143" cy="145" r="72" fill="#24114F" stroke="#FFFFFF" stroke-width="10"/>
+  <circle cx="143" cy="145" r="49" fill="#4C1D95" stroke="#A78BFA" stroke-width="5"/>
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-width="9">
+    <path d="M143 96v30m0 38v30"/>
+    <path d="M94 145h30m38 0h30"/>
+  </g>
+  <circle cx="143" cy="145" r="11" fill="#FDE047" stroke="#24114F" stroke-width="5"/>
+</svg>

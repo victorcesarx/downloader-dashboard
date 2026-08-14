@@ -1,6 +1,16 @@
 import { isPrivateHost } from './middleware/ssrf.js';
+import { increment, logger, observe } from './observability.js';
+import { getGoFileDownloadHeaders, isGoFileUrl } from './scrapers/gofile.js';
 
 export async function handleProxy(req, res, reqUrl) {
+  const startedAt = process.hrtime.bigint();
+  let clientClosed = false;
+  res.once('close', () => { clientClosed = true; });
+  // Desconexões no proxy de desenvolvimento não podem virar eventos de erro
+  // sem listener e derrubar o processo Node.
+  res.on('error', error => {
+    logger.warn('proxy.response_error', { error });
+  });
   const targetUrl = reqUrl.searchParams.get('url');
   if (!targetUrl) {
     res.writeHead(400);
@@ -29,8 +39,7 @@ export async function handleProxy(req, res, reqUrl) {
     return res.end(JSON.stringify({ error: 'Access blocked' }));
   }
 
-  const rangeHint = req.headers.range ? ` range=${req.headers.range}` : '';
-  console.log(`[Proxy] ${targetUrl.substring(0, 120)}${rangeHint}`);
+  logger.info('proxy.started', { rangeRequested: Boolean(req.headers.range) });
   try {
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -46,13 +55,19 @@ export async function handleProxy(req, res, reqUrl) {
       headers['Referer'] = 'https://bunkr.xxx/';
     } else if (targetUrl.includes('pixeldrain.com')) {
       headers['Referer'] = 'https://pixeldrain.com/';
+    } else if (targetUrl.includes('imagepond.net')) {
+      headers['Referer'] = 'https://www.imagepond.net/';
     }
 
     const MAX_REDIRECTS = 5;
     let currentUrl = targetUrl;
     let proxyRes;
+    const goFileHeaders = isGoFileUrl(targetUrl) ? await getGoFileDownloadHeaders() : null;
     for (let i = 0; i <= MAX_REDIRECTS; i++) {
-      proxyRes = await fetch(currentUrl, { headers, redirect: 'manual' });
+      const requestHeaders = isGoFileUrl(currentUrl) && goFileHeaders
+        ? { ...headers, ...goFileHeaders }
+        : headers;
+      proxyRes = await fetch(currentUrl, { headers: requestHeaders, redirect: 'manual' });
       const status = proxyRes.status;
       if (status >= 300 && status < 400) {
         const location = proxyRes.headers.get('location');
@@ -69,7 +84,7 @@ export async function handleProxy(req, res, reqUrl) {
           return res.end(JSON.stringify({ error: 'Redirect to private IP blocked' }));
         }
         currentUrl = redirectUrl;
-        console.log(`[Proxy] Following redirect ${i + 1}: ${redirectUrl.substring(0, 100)}`);
+        logger.debug('proxy.redirect_followed', { redirectNumber: i + 1 });
         continue;
       }
       break;
@@ -82,24 +97,37 @@ export async function handleProxy(req, res, reqUrl) {
     if (proxyRes.headers.get('accept-ranges')) resHeaders['Accept-Ranges'] = proxyRes.headers.get('accept-ranges');
 
     res.writeHead(proxyRes.status, resHeaders);
-    console.log(`[Proxy] Response ${proxyRes.status} for ${targetUrl.substring(0, 80)}`);
+    let transferredBytes = 0;
 
     if (proxyRes.body && typeof proxyRes.body.getReader === 'function') {
       const reader = proxyRes.body.getReader();
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        if (clientClosed || res.writableEnded || res.destroyed) {
+          await reader.cancel().catch(() => {});
+          break;
+        }
+        transferredBytes += value.byteLength;
         res.write(Buffer.from(value));
       }
+      if (!clientClosed && !res.writableEnded && !res.destroyed) res.end();
     } else {
       const buffer = Buffer.from(await proxyRes.arrayBuffer());
+      transferredBytes = buffer.length;
       res.end(buffer);
-      return;
     }
-    res.end();
+    const outcome = proxyRes.ok || proxyRes.status === 206 ? 'success' : 'upstream_error';
+    increment('webscope_proxy_requests_total', { outcome, status_class: `${Math.floor(proxyRes.status / 100)}xx` });
+    increment('webscope_downloads_total', { kind: 'proxy', outcome });
+    increment('webscope_download_bytes_total', { kind: 'proxy' }, transferredBytes);
+    observe('webscope_proxy_duration_seconds', Number(process.hrtime.bigint() - startedAt) / 1e9, { outcome });
+    logger.info('proxy.completed', { statusCode: proxyRes.status, transferredBytes, outcome });
   } catch (err) {
-    console.error('Proxy Error:', err);
-    res.writeHead(502);
-    res.end('Proxy Error');
+    increment('webscope_proxy_requests_total', { outcome: 'error', status_class: '5xx' });
+    observe('webscope_proxy_duration_seconds', Number(process.hrtime.bigint() - startedAt) / 1e9, { outcome: 'error' });
+    logger.error('proxy.failed', { error: err });
+    if (!res.headersSent) res.writeHead(502);
+    if (!res.writableEnded && !res.destroyed) res.end('Proxy Error');
   }
 }

@@ -5,8 +5,16 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
+    "start": "node server/production.js",
+    "start:source": "node server.js",
+    "dev": "node server/dev.js",
+    "dev:server": "node --watch server.js",
+    "dev:client": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "check:build": "node server/check-build.js",
+    "start:prod": "node server/production.js",
+    "preview": "npm run build && npm run start:prod",
+    "verify": "npm run test && npm run build && npm run check:build",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -24,6 +32,7 @@
   },
   "devDependencies": {
     "jsdom": "^29.1.1",
+    "vite": "^8.1.5",
     "vitest": "^4.1.10"
   }
 }

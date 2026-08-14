@@ -147,7 +147,7 @@ export function playBeep() {
 export function showSystemNotification(title, body = '') {
   try {
     if (!('Notification' in window) || Notification.permission !== 'granted') return false;
-    new Notification(title, { body, icon: '/favicon.ico' });
+    new Notification(title, { body, icon: '/icon.svg' });
     return true;
   } catch { return false; }
 }
@@ -159,27 +159,47 @@ export class Toast {
       container = document.createElement('div');
       container.id = 'toast-container';
       container.className = 'toast-container';
+      container.setAttribute('aria-live', 'polite');
+      container.setAttribute('aria-atomic', 'false');
       document.body.appendChild(container);
     }
 
+    const safeType = ['info', 'success', 'warning', 'error'].includes(type) ? type : 'info';
     const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    
+    toast.className = `toast toast-${safeType}`;
+    toast.setAttribute('role', safeType === 'error' ? 'alert' : 'status');
+
     const iconMap = {
-      info: 'ℹ️',
-      success: '✅',
-      warning: '⚠️',
-      error: '❌'
+      info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+      success: '<circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.6L16.5 9"/>',
+      warning: '<path d="M10.3 4.2 3.1 17a2 2 0 0 0 1.7 3h14.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 16.5h.01"/>',
+      error: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>'
     };
 
-    toast.innerHTML = `<span>${iconMap[type] || 'ℹ️'}</span> <span>${sanitizeHtml(message)}</span>`;
+    toast.style.setProperty('--toast-duration', `${Math.max(0, duration)}ms`);
+    toast.innerHTML = `
+      <span class="toast-accent" aria-hidden="true"></span>
+      <span class="toast-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${iconMap[safeType]}</svg></span>
+      <button class="toast-close" type="button" aria-label="Fechar" title="Fechar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <div class="toast-timer" aria-hidden="true"></div>
+      <span class="toast-message">${sanitizeHtml(message)}</span>`;
     container.appendChild(toast);
 
-    setTimeout(() => {
-      toast.style.opacity = '0';
-      toast.style.transform = 'translateX(-100%)';
-      toast.style.transition = 'all 0.3s ease';
-      setTimeout(() => toast.remove(), 300);
-    }, duration);
+    while (container.children.length > 4) container.firstElementChild?.remove();
+
+    let removed = false;
+    const dismiss = () => {
+      if (removed) return;
+      removed = true;
+      toast.classList.add('toast-exit');
+      setTimeout(() => {
+        toast.remove();
+        if (container.childElementCount === 0) container.remove();
+      }, 180);
+    };
+    toast.querySelector('.toast-close').addEventListener('click', dismiss);
+    setTimeout(dismiss, Math.max(0, duration));
   }
 }

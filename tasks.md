@@ -1,6 +1,6 @@
 # WebScope — Roadmap de Qualidade e Evolução
 
-Atualizado em: 08/08/2026 — itens 1 a 6 e 8 a 14 concluídos; item 7 ignorado
+Atualizado em: 14/08/2026 — itens 1 a 6, 8 a 17 e 21 a 25 concluídos; item 7 ignorado
 
 Este arquivo é a fonte única de verdade para as próximas etapas. Os itens
 devem ser executados em ordem. Uma etapa só pode ser marcada como concluída
@@ -275,7 +275,7 @@ e metadados sincronizados.
 - Listar arquivos concluídos, ignorados e falhos.
 - Exibir motivo por arquivo.
 - Retry somente das falhas.
-- Exportar relatório JSON ou texto.
+- Exportar relatório em texto.
 - Manter o ZIP utilizável quando houver sucesso parcial.
 
 Implementado:
@@ -290,15 +290,17 @@ Implementado:
   um ou mais itens falham.
 - Ação para criar uma nova tarefa ZIP contendo exclusivamente os arquivos que
   falharam, preservando o relatório original e identificando a tarefa de origem.
-- Relatórios exportáveis em JSON estruturado e texto legível diretamente pela fila.
+- Relatórios exportáveis em texto legível diretamente pela fila.
+- Ação `Cancelar ZIP` disponível inclusive após a conclusão: aborta streams,
+  apaga arquivo e temporários e remove tarefa e relatório de retry do servidor.
 - Metadados mínimos das falhas permanecem no servidor durante a janela de
   retenção mesmo depois da transferência e remoção do arquivo ZIP temporário.
 - Interface traduzida em PT-BR/EN e testes de backend, endpoint, fila, payload,
-  exportação e retry seletivo.
+  exportação, cancelamento destrutivo e retry seletivo.
 
 Critério de aceitação: toda tarefa ZIP informa claramente o resultado de cada
-arquivo, permite aproveitar sucessos parciais, repetir somente falhas e exportar
-o diagnóstico sem conservar o arquivo temporário além do necessário.
+arquivo, permite aproveitar sucessos parciais, repetir somente falhas, exportar
+o diagnóstico e remover integralmente a instância sem conservar temporários.
 
 ### [x] 13. Seleção invertida
 
@@ -368,7 +370,7 @@ centralizados e usam o mesmo contrato de interação do design system.
 
 ## Fase 3 — Distribuição e manutenção
 
-### [ ] 15. Build com Vite ou esbuild
+### [x] 15. Build com Vite
 
 - Bundling e minificação de JS/CSS.
 - Assets com hash para cache imutável.
@@ -376,7 +378,29 @@ centralizados e usam o mesmo contrato de interação do design system.
 - Separar configuração de desenvolvimento e produção.
 - Remover a necessidade de versões manuais como `main.css?v=N`.
 
-### [ ] 16. Dockerfile e docker-compose
+Implementado:
+
+- Vite configurado com `index.html` como entrada e manifesto de produção.
+- Bundle minificado de JS/CSS com nomes baseados em hash dentro de `dist/assets/`.
+- Traduções PT-BR/EN copiadas e validadas em `dist/locales/` durante o build.
+- Tema inicial incorporado ao grafo de módulos sem perder a aplicação antes da UI.
+- Import externo de fontes removido para manter assets compatíveis com a CSP.
+- Desenvolvimento com Vite/HMR na porta 5173 e proxy para o backend na porta 3006.
+- Produção servida exclusivamente de `dist/`, com falha rápida quando o build falta.
+- Cache imutável de um ano somente para assets com hash; HTML e locales usam `no-cache`.
+- Compressão gzip corrigida para JavaScript e JSON com `charset` no MIME type.
+- Source maps desativados por padrão e disponíveis apenas no build de diagnóstico.
+- Scripts de build, verificação, preview, produção e pipeline completo adicionados.
+- Verificador automático exige hashes, manifesto, locales, arquivos existentes,
+  ausência de versões manuais e ausência de source maps no build padrão.
+- Documentação de desenvolvimento, produção, cache e diagnóstico em `BUILD.md`.
+- Smoke tests dos modos desenvolvimento/produção e validação visual em desktop/mobile.
+
+Critério de aceitação: uma instalação limpa consegue testar, gerar e validar um
+artefato autocontido, e o servidor Node entrega esse artefato com CSP, gzip e
+políticas de cache coerentes sem expor os módulos fonte em produção.
+
+### [x] 16. Dockerfile e docker-compose
 
 - Imagem multi-stage e usuário sem privilégios.
 - Healthcheck.
@@ -384,14 +408,73 @@ centralizados e usam o mesmo contrato de interação do design system.
 - Variáveis documentadas.
 - Exemplo de proxy reverso.
 
-### [ ] 17. Observabilidade local
+Implementado:
+
+- `Dockerfile` multi-stage separa dependências, validação/build e runtime enxuto.
+- O build da imagem executa o pipeline completo de testes e validação do bundle.
+- Runtime baseado em Node 24, executado como usuário `node` sem privilégios.
+- Contexto reduzido por `.dockerignore`, sem segredos, temporários ou artefatos locais.
+- Endpoint `GET /health` público, sem dados sensíveis, valida a escrita no diretório
+  temporário e é usado pelos healthchecks da imagem e do Compose.
+- `docker-compose.yml` publica apenas em localhost por padrão, usa filesystem
+  somente leitura, remove capabilities e aplica limites de memória, CPU e processos.
+- Volume nomeado e `TEMP_DIR` configurável isolam os arquivos temporários de ZIP;
+  cotas de tarefa e de ocupação total permanecem configuráveis por ambiente.
+- Override `docker-compose.proxy.yml` e `Caddyfile.example` demonstram HTTPS e
+  proxy reverso sem expor diretamente a porta da aplicação.
+- Variáveis, operações, persistência, atualização e cenários de proxy documentados
+  em `DOCKER.md` e `.env.example`.
+- Testes automatizados validam os invariantes de segurança dos arquivos de
+  contêiner e o contrato do endpoint de saúde.
+
+Critério de aceitação: a configuração descreve uma imagem reproduzível e não
+privilegiada, com saúde observável, temporários persistentes e limitados e uma
+rota documentada para execução local ou atrás de proxy reverso.
+
+Validação em Docker Desktop 29.6.2 / Compose 5.3.1:
+
+- Imagem construída com sucesso e os 534 testes executados dentro do build.
+- Contêiner saudável como `node:node`, com root filesystem somente leitura.
+- Limites efetivos de 1 GiB de memória, 1 CPU e 200 processos confirmados.
+- Healthcheck, autenticação e persistência do volume após reinício validados.
+- Proxy Caddy validado em HTTPS, com redirecionamento automático de HTTP.
+
+### [x] 17. Observabilidade local
 
 - Logs estruturados com request/task ID.
 - Métricas de análise, scraper, proxy, download e ZIP.
 - Endpoint de saúde sem dados sensíveis.
 - Níveis de log configuráveis.
 
+Implementado:
+
+- Logger JSON por linha com níveis `debug`, `info`, `warn` e `error`, configurado
+  por `LOG_LEVEL` e adequado à coleta via stdout/stderr.
+- Formato compacto e colorido no desenvolvimento, mantendo JSON em produção;
+  detalhes legados e mensagens por item ficam restritos ao nível `debug`.
+- Correlação automática por `requestId` usando contexto assíncrono e header
+  `X-Request-ID`; operações ZIP relevantes também incluem `taskId`.
+- Redaction centralizada de URLs, tokens, autorização, cookies, senhas e segredos.
+- Métricas Prometheus em `GET /metrics`, protegidas pela autenticação existente
+  quando `DOWNDASH_TOKEN` está configurado e sem labels de alta cardinalidade.
+- Contadores e durações para HTTP, análise, scraper, proxy, download e ZIP, além
+  de gauges da fila ZIP, uptime e memória residente do processo.
+- Rotas normalizadas nas métricas para impedir que IDs e caminhos arbitrários
+  sejam convertidos em labels.
+- `GET /health` permanece público, sem cache e sem dados sensíveis, retornando
+  `503` quando o diretório temporário deixa de estar gravável.
+- Variáveis, formato, segurança e exemplos de consulta documentados em
+  `OBSERVABILITY.md`, `.env.example` e no Compose.
+- Testes automatizados cobrem redaction, correlação, métricas e ausência de
+  caminhos ou IDs sensíveis nos endpoints operacionais.
+
+Critério de aceitação: uma requisição pode ser correlacionada do acesso HTTP à
+operação de domínio, falhas podem ser filtradas por nível e os principais fluxos
+podem ser monitorados localmente sem registrar ou expor dados fornecidos pelo usuário.
+
 ### [ ] 18. Migração gradual para TypeScript
+
+Status: adiado por decisão de produto; retomar após os recursos avançados prioritários.
 
 - Começar pelos contratos MediaItem, download e ZIP.
 - JSDoc/checkJs antes da conversão completa.
@@ -399,6 +482,8 @@ centralizados e usam o mesmo contrato de interação do design system.
 - Nenhuma migração massiva sem cobertura equivalente.
 
 ### [ ] 19. PWA e Service Worker
+
+Status: adiado por decisão de produto; retomar após os recursos avançados prioritários.
 
 Executar somente depois do build com assets versionados.
 
@@ -419,36 +504,81 @@ Executar somente depois do build com assets versionados.
 - Limites, cancelamento, progresso e limpeza de temporários.
 - Revisar implicações legais e de termos de uso antes da distribuição.
 
-### [ ] 21. Lightbox e galeria
+### [x] 21. Lightbox e galeria
 
 - Navegação anterior/próxima.
 - Teclado, touch e preload limitado.
 - Respeitar filtros e ordem atuais.
 - Não carregar arquivos originais sem ação do usuário.
 
-### [ ] 22. Preview de áudio com waveform
+Implementado:
+
+- O preview existente passou a funcionar como lightbox, usando a mesma lista
+  filtrada, ordenada e com variantes colapsadas exibida nos cards.
+- Navegação circular por botões, setas do teclado e gesto horizontal no touch,
+  com contador e rótulos acessíveis em PT-BR e EN.
+- Somente as thumbnails dos dois itens vizinhos são pré-carregadas; a mídia
+  principal só é solicitada quando o usuário abre ou navega até o item.
+- Fechamento por botão, backdrop ou Escape pausa a mídia e restaura o foco.
+- Layout responsivo, suporte a tema claro/escuro pelos tokens existentes e
+  respeito à preferência de movimento reduzido.
+
+### [x] 22. Preview de áudio com waveform
 
 - Geração progressiva e cancelável.
 - Fallback para player nativo.
 - Não bloquear a thread principal em arquivos grandes.
 
-### [ ] 23. Seletor visual de qualidade
+Implementado:
+
+- Waveform progressivo em `canvas` alimentado pelo `AnalyserNode` do próprio
+  player, sem baixar ou decodificar antecipadamente o arquivo completo.
+- Desenho distribuído por `requestAnimationFrame` e cancelado ao pausar,
+  terminar, trocar de mídia ou fechar o lightbox.
+- Player HTML nativo permanece sempre disponível; quando Web Audio ou CORS não
+  permitem a análise, uma mensagem traduzida informa o fallback.
+- Resolução do canvas limitada a 2× a densidade da tela para evitar custo
+  desnecessário em monitores de alta densidade.
+- Testes cobrem ordem da galeria, teclado, preload limitado, fallback e limpeza.
+
+### [x] 23. Seletor visual de qualidade
 
 - Resolução, tamanho e formato por variante.
 - Preview somente quando houver thumbnail distinta.
 - Integrar com card, Inspector e preferência padrão.
 
-### [ ] 24. Reordenação dos itens do ZIP
+Implementado:
+
+- Opções visuais exibem resolução/qualidade, formato e tamanho disponível.
+- Miniaturas aparecem somente quando uma opção oferece imagem distinta da atual.
+- Cards e Inspector compartilham o mesmo padrão para qualidades e variantes.
+- A seleção continua respeitando a preferência padrão aplicada durante a análise.
+
+### [x] 24. Reordenação dos itens do ZIP
 
 - Drag and drop com alternativa por teclado.
 - Preservar ordem no payload e no arquivo final.
 - Funcionar com listas virtualizadas.
 
-### [ ] 25. Badge de progresso no favicon
+Implementado:
+
+- Modal único reúne nomeação do ZIP e organização dos arquivos selecionados.
+- Reordenação por drag and drop, botões acessíveis e `Alt + ↑/↓` pelo teclado.
+- A lista usa o estado completo da análise, independentemente da virtualização dos cards.
+- O payload preserva a ordem escolhida e o backend insere as entradas nessa mesma sequência, mesmo com downloads concorrentes.
+
+### [x] 25. Badge de progresso no favicon
 
 - Contagem de downloads ativos.
 - Restaurar favicon original ao zerar.
 - Desativável nas preferências.
+
+Implementado:
+
+- O favicon mostra a quantidade de downloads individuais e ZIPs ainda ativos, com limite visual em `99+`.
+- Ao concluir todos os downloads ou desativar a opção, o favicon original é restaurado sem atraso de renderizações anteriores.
+- A preferência fica ativada por padrão, é persistente e está disponível em português e inglês.
+- Cobertura automatizada inclui contagem, restauração, desativação, persistência e concorrência assíncrona; layout validado em desktop/mobile e temas claro/escuro.
 
 ### [ ] 26. Integração opcional com Telegram
 

@@ -26,6 +26,12 @@ const mock = vi.hoisted(() => {
   };
 });
 
+const faviconMock = vi.hoisted(() => ({ update: vi.fn() }));
+
+vi.mock('../../scripts/favicon-progress.js', () => ({
+  updateFaviconProgress: faviconMock.update,
+}));
+
 vi.mock('../../scripts/downloader.js', () => ({
   DOWNLOAD_MAX_ATTEMPTS: 3,
   cancelActiveDownload: vi.fn(ad => ad.controller?.abort()),
@@ -72,7 +78,8 @@ vi.mock('../../scripts/i18n.js', () => ({
       'zip.report_ignored': 'Ignorado',
       'zip.report_pending': 'Pendente',
       'zip.retry_failed': 'Tentar falhas ({count})',
-      'zip.export_json': 'Exportar JSON',
+      'zip.cancel': 'Cancelar ZIP',
+      'zip.cancel_error': 'Não foi possível cancelar e remover o ZIP.',
       'zip.export_text': 'Exportar texto',
       'actions.close_btn': 'Fechar',
     };
@@ -130,6 +137,7 @@ beforeEach(() => {
   if (panelEl) document.body.appendChild(panelEl);
   mock.downloads.clear();
   clearZipQueueForTests();
+  faviconMock.update.mockClear();
   initQueue();
 });
 
@@ -140,6 +148,14 @@ afterEach(() => {
 });
 
 describe('abas da Fila de Downloads', () => {
+  it('envia a quantidade de itens ativos para o favicon', () => {
+    mock.downloads.set('a1', makeItem('a1'));
+    mock.downloads.set('c1', makeItem('c1', { _done: true, state: 'completed' }));
+    mock.notifyChange();
+
+    expect(faviconMock.update).toHaveBeenLastCalledWith(1, true);
+  });
+
   it('clique programático fora do drawer (a.click() do download) não fecha a fila', () => {
     const panel = activeDrawer();
     const anchor = document.createElement('a');
@@ -259,6 +275,8 @@ describe('abas da Fila de Downloads', () => {
     expect(bodyText(panel)).toContain('resultado.zip');
     expect(bodyText(panel)).toContain('ZIP pronto para download');
     expect(bodyText(panel)).toContain('Baixar ZIP Agora');
+    expect(bodyText(panel)).toContain('Cancelar ZIP');
+    expect(bodyText(panel)).not.toContain('Exportar JSON');
 
     panel.querySelector('[data-action="download-zip"]').click();
 
@@ -281,7 +299,7 @@ describe('abas da Fila de Downloads', () => {
     expect(bodyText(panel)).toContain('Sem espaço temporário');
   });
 
-  it('exibe o relatório parcial e as ações de retry e exportação no ZIP pronto', () => {
+  it('exibe retry, exportação de texto e cancelamento no ZIP pronto', () => {
     addZipQueueTask({ taskId: 'zip-report', name: 'parcial.zip', total: 3, totalBytes: 1200, unknownCount: 0 });
     const panel = activeDrawer();
     updateZipQueueTask('zip-report', {
@@ -299,7 +317,8 @@ describe('abas da Fila de Downloads', () => {
     expect(bodyText(panel)).toContain('fail.jpg');
     expect(bodyText(panel)).toContain('HTTP 403');
     expect(bodyText(panel)).toContain('Tentar falhas (1)');
-    expect(bodyText(panel)).toContain('Exportar JSON');
+    expect(bodyText(panel)).not.toContain('Exportar JSON');
     expect(bodyText(panel)).toContain('Exportar texto');
+    expect(bodyText(panel)).toContain('Cancelar ZIP');
   });
 });

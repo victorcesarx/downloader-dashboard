@@ -14,12 +14,6 @@ function deliveryBadgeHtml(item) {
   return `<span class="media-badge media-badge--${key}">${t(`badge.${key}`)}</span>`;
 }
 
-// Selo de variantes: mostra o total de variantes do grupo (2+) do item.
-function variantBadgeHtml(item) {
-  if (!item.variantCount || item.variantCount < 2) return '';
-  return `<span class="media-badge media-badge--variants">${t('badge.variants', { count: item.variantCount })}</span>`;
-}
-
 // Rótulo de uma variante no seletor: usa os melhores dados disponíveis, nesta
 // ordem — quality → resolução completa (width × height) → altura (1080p) →
 // tamanho formatado → nome do arquivo.
@@ -40,11 +34,40 @@ function variantSelectHtml(item) {
   const currentUrl = current.url;
   const options = groupItems.map(m => `
             <option value="${sanitizeHtml(m.url)}" ${m.url === currentUrl ? 'selected' : ''}>${sanitizeHtml(variantLabel(m))}</option>`).join('');
+  const visualOptions = groupItems.map(m => qualityChoiceHtml(m, m.url, m.url === currentUrl, 'variant-choice', item.thumbnail)).join('');
   return `
-            <select class="variant-select" data-key="${sanitizeHtml(item.variantGroupKey)}" aria-label="${t('actions.select_variant')}">
+            <details class="quality-picker"><summary title="${t('quality.choose')}">${sanitizeHtml(variantLabel(current))}</summary><div class="quality-options">${visualOptions}</div></details>
+            <select class="variant-select quality-native-select" data-key="${sanitizeHtml(item.variantGroupKey)}" aria-label="${t('actions.select_variant')}">
               <option value="" disabled>${t('actions.select_variant')}</option>
               ${options}
             </select>`;
+}
+
+function optionFormat(option) {
+  return String(option.extension || option.ext || '').replace(/^\./, '').toUpperCase() || t('common.na');
+}
+
+function optionResolution(option) {
+  if (option.width && option.height) return `${option.width} × ${option.height}`;
+  if (option.height) return `${option.height}p`;
+  return option.quality || option.label || t('common.na');
+}
+
+function qualityChoiceHtml(option, value, selected, className, currentThumbnail) {
+  const distinctThumb = option.thumbnail && option.thumbnail !== currentThumbnail;
+  return `<button class="quality-choice ${className}${selected ? ' selected' : ''}" type="button" data-value="${sanitizeHtml(String(value))}" aria-pressed="${selected}">
+    ${distinctThumb ? `<img src="${sanitizeHtml(option.thumbnail)}" alt="" loading="lazy">` : ''}
+    <span class="quality-choice-main"><strong>${sanitizeHtml(optionResolution(option))}</strong><small>${sanitizeHtml(optionFormat(option))} · ${formatMediaSize(option.size)}</small></span>
+    <span class="quality-choice-check" aria-hidden="true">✓</span>
+  </button>`;
+}
+
+function embeddedQualityHtml(item) {
+  if (!item.qualities || item.qualities.length < 2) return '';
+  const selectedIndex = item.selectedQualityIndex || 0;
+  const selected = item.qualities[selectedIndex] || item.qualities[0];
+  return `<details class="quality-picker"><summary title="${t('quality.choose')}">${sanitizeHtml(optionResolution(selected))}</summary><div class="quality-options">${item.qualities.map((quality, index) => qualityChoiceHtml(quality, index, index === selectedIndex, 'embedded-quality-choice', item.thumbnail)).join('')}</div></details>
+    <select class="quality-select quality-native-select" data-id="${item.id}" aria-label="${t('quality.choose')}">${item.qualities.map((q, i) => `<option value="${i}" ${i === selectedIndex ? 'selected' : ''}>${sanitizeHtml(q.label || optionResolution(q))}</option>`).join('')}</select>`;
 }
 
 export function buildCardHtml(item, isSelected, typeIconMap = TYPE_ICON_MAP) {
@@ -62,19 +85,16 @@ let previewContent = `<div class="media-placeholder-icon">${typeIconMap[item.typ
         ${previewContent}
         <span class="card-badge-type">${sanitizeHtml(item.label || item.type)}</span>
         ${deliveryBadgeHtml(item)}
-        ${variantBadgeHtml(item)}
       </div>
       <div class="card-body">
-        <div class="card-title" title="${sanitizeHtml(item.name)}">${sanitizeHtml(item.name)}</div>
+        <div class="card-heading">
+          <div class="card-title" title="${sanitizeHtml(item.name)}">${sanitizeHtml(item.name)}</div>
+          ${embeddedQualityHtml(item)}
+          ${variantSelectHtml(item)}
+        </div>
         <div class="card-meta">
           <span>${item.ext ? item.ext.toUpperCase() : ''}</span>
           <span>${formatMediaSize(item.size)}</span>
-          ${item.qualities && item.qualities.length > 1 ? `
-            <select class="quality-select" data-id="${item.id}">
-              ${item.qualities.map((q, i) => `<option value="${i}" ${i === item.selectedQualityIndex ? 'selected' : ''}>${q.label}</option>`).join('')}
-            </select>
-          ` : ''}
-          ${variantSelectHtml(item)}
         </div>
         <div class="card-actions card-state" data-state="idle">
           <button class="btn btn-secondary btn-sm copy-link-btn" data-id="${item.id}" title="${t('actions.copy_link')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>

@@ -41,6 +41,27 @@ function variantLabel(item) {
     .filter(Boolean).join(' · ') || item.name;
 }
 
+function inspectorVariantOptions(variants, item) {
+  return `<div class="quality-options inspector-quality-options">${variants.map(variant => {
+    const distinctThumb = variant.thumbnail && variant.thumbnail !== item.thumbnail;
+    const resolution = variant.width && variant.height ? `${variant.width} × ${variant.height}` : variant.height ? `${variant.height}p` : variant.quality || variant.label || t('common.na');
+    const format = String(variant.extension || variant.ext || '').replace(/^\./, '').toUpperCase() || t('common.na');
+    const selected = String(variant.id) === String(item.id);
+    return `<button class="quality-choice inspector-variant-choice${selected ? ' selected' : ''}" type="button" data-value="${sanitizeHtml(variant.id)}" aria-pressed="${selected}">${distinctThumb ? `<img src="${sanitizeHtml(variant.thumbnail)}" alt="" loading="lazy">` : ''}<span class="quality-choice-main"><strong>${sanitizeHtml(resolution)}</strong><small>${sanitizeHtml(format)} · ${formatMediaSize(variant.size)}</small></span><span class="quality-choice-check" aria-hidden="true">✓</span></button>`;
+  }).join('')}</div>`;
+}
+
+function inspectorEmbeddedQualities(item) {
+  if (!Array.isArray(item.qualities) || item.qualities.length < 2) return '';
+  return `<section class="inspector-section inspector-qualities"><h5>${t('quality.choose')}</h5><div class="quality-options inspector-quality-options">${item.qualities.map((quality, index) => {
+    const selected = index === (item.selectedQualityIndex || 0);
+    const resolution = quality.width && quality.height ? `${quality.width} × ${quality.height}` : quality.height ? `${quality.height}p` : quality.label || t('common.na');
+    const format = String(quality.extension || quality.ext || item.ext || '').replace(/^\./, '').toUpperCase() || t('common.na');
+    const distinctThumb = quality.thumbnail && quality.thumbnail !== item.thumbnail;
+    return `<button class="quality-choice inspector-quality-choice${selected ? ' selected' : ''}" type="button" data-index="${index}" aria-pressed="${selected}">${distinctThumb ? `<img src="${sanitizeHtml(quality.thumbnail)}" alt="" loading="lazy">` : ''}<span class="quality-choice-main"><strong>${sanitizeHtml(resolution)}</strong><small>${sanitizeHtml(format)} · ${formatMediaSize(quality.size)}</small></span><span class="quality-choice-check" aria-hidden="true">✓</span></button>`;
+  }).join('')}</div></section>`;
+}
+
 function metadataJson(item) {
   const ratio = aspectRatio(item);
   return {
@@ -163,8 +184,10 @@ function render() {
       </div>
       ${variants.length > 1 ? `<section class="inspector-section inspector-variants" aria-labelledby="inspector-variants-heading">
         <h5 id="inspector-variants-heading">${t('inspector.variants')}</h5>
-        <select class="inspector-variant-select" aria-label="${t('actions.select_variant')}">${variants.map(variant => `<option value="${sanitizeHtml(variant.id)}" ${String(variant.id) === String(item.id) ? 'selected' : ''}>${sanitizeHtml(variantLabel(variant))}</option>`).join('')}</select>
+        ${inspectorVariantOptions(variants, item)}
+        <select class="inspector-variant-select quality-native-select" aria-label="${t('actions.select_variant')}">${variants.map(variant => `<option value="${sanitizeHtml(variant.id)}" ${String(variant.id) === String(item.id) ? 'selected' : ''}>${sanitizeHtml(variantLabel(variant))}</option>`).join('')}</select>
       </section>` : ''}
+      ${inspectorEmbeddedQualities(item)}
       <section class="inspector-section" aria-labelledby="inspector-file-heading">
         <div class="inspector-section-heading"><h5 id="inspector-file-heading">${t('inspector.file_details')}</h5><button class="btn btn-secondary btn-sm inspector-refresh" type="button" ${probeState.loading ? 'disabled' : ''}>${probeState.loading ? t('inspector.probing') : t('inspector.refresh')}</button></div><dl>
           ${detailRow(t('inspector.type'), translatedType(item))}
@@ -234,6 +257,18 @@ function render() {
     probeState = { loading: false, error: null, metadata: null };
     render();
   });
+  panel.querySelectorAll('.inspector-variant-choice').forEach(button => button.addEventListener('click', () => {
+    const select = panel.querySelector('.inspector-variant-select');
+    select.value = button.dataset.value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }));
+  panel.querySelectorAll('.inspector-quality-choice').forEach(button => button.addEventListener('click', () => {
+    const index = Number.parseInt(button.dataset.index, 10);
+    const quality = item.qualities?.[index];
+    if (!quality) return;
+    replaceCurrentItem({ selectedQualityIndex: index, url: quality.url, proxyUrl: quality.proxyUrl, size: quality.size, width: quality.width, height: quality.height, quality: quality.label, extension: quality.extension || quality.ext });
+    render();
+  }));
   panel.querySelector('.inspector-refresh').addEventListener('click', async () => {
     probeState = { loading: true, error: null, metadata: probeState.metadata };
     render();

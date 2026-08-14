@@ -13,8 +13,15 @@ describe('preferências persistentes', () => {
     localStorage.setItem('downdash_blur', 'true');
     const { getPreferences, updatePreference } = await import('../../scripts/preferences.js');
     expect(getPreferences()).toMatchObject({ theme: 'dark', lang: 'en', thumbBlurred: true });
+    expect(getPreferences().faviconBadgeEnabled).toBe(true);
     expect(updatePreference('downloadConcurrency', 99).downloadConcurrency).toBe(5);
     expect(updatePreference('historyRetention', 2).historyRetention).toBe(10);
+  });
+
+  it('persiste a opção de desativar o badge do favicon', async () => {
+    const { getPreferences, updatePreference } = await import('../../scripts/preferences.js');
+    updatePreference('faviconBadgeEnabled', false);
+    expect(getPreferences().faviconBadgeEnabled).toBe(false);
   });
 
   it('restaura padrões e notifica assinantes', async () => {

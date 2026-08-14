@@ -1,6 +1,7 @@
 /**
  * Main Application Controller (app.js)
  */
+import './theme.js';
 import { store } from './state.js';
 import { initI18n, onLocaleChange, t } from './i18n.js';
 import { analyzeUrl, clearCache } from './analyzer.js';

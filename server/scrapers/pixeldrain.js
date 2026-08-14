@@ -27,7 +27,7 @@ export async function scrapePixelDrain(url) {
 
       const ext = (name.split('.').pop() || '').toLowerCase();
       let type = 'document';
-      if (['mp4', 'webm', 'mkv'].includes(ext) || mime.startsWith('video/')) type = 'video';
+      if (['mp4', 'webm', 'mkv', 'mov', 'm4v', 'avi'].includes(ext) || mime.startsWith('video/')) type = 'video';
       else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) || mime.startsWith('image/')) type = 'image';
       else if (['mp3', 'wav', 'ogg'].includes(ext) || mime.startsWith('audio/')) type = 'audio';
 
@@ -50,7 +50,7 @@ export async function scrapePixelDrain(url) {
       const items = files.map(f => {
         const ext = (f.name.split('.').pop() || '').toLowerCase();
         let type = 'document';
-        if (['mp4', 'webm', 'mkv'].includes(ext)) type = 'video';
+        if (['mp4', 'webm', 'mkv', 'mov', 'm4v', 'avi'].includes(ext)) type = 'video';
         else if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) type = 'image';
         else if (['mp3', 'wav', 'ogg'].includes(ext)) type = 'audio';
 

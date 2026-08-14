@@ -204,6 +204,9 @@
   /* Cantos grandes — modais, cards destacados */
   --ds-radius-lg: 12px;
 
+  /* Pills, contadores e indicadores circulares */
+  --ds-radius-full: 9999px;
+
   /* ==========================================================
      SHADOW · Sombras
      Elevação discreta de superfícies e overlays.

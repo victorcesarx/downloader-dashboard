@@ -53,6 +53,8 @@
     "sound_hint": "Alerts when a file finishes",
     "notifications": "System notifications",
     "notifications_hint": "Shows an alert outside the tab",
+    "favicon_badge": "Favicon progress",
+    "favicon_badge_hint": "Shows the number of active downloads in the tab",
     "quality": "Preferred quality",
     "quality_best": "Best available",
     "concurrency": "Simultaneous downloads",
@@ -160,6 +162,12 @@
     "start_error": "Failed to start ZIP packaging",
     "task_error": "Task cancelled or error",
     "rename_label": "Name your ZIP file",
+    "organize_title": "Organize ZIP files",
+    "organize_hint": "Drag files or use Alt + arrow keys to define the final order.",
+    "organize_list": "File order in the ZIP",
+    "organize_moved": "{name} moved to position {position}.",
+    "move_up": "Move file up",
+    "move_down": "Move file down",
     "start": "Start ZIP",
     "report_title": "ZIP report",
     "report_summary": "Report: {completed} completed, {failed} failed, {ignored} ignored",
@@ -170,10 +178,12 @@
     "retry_failed": "Retry failures ({count})",
     "retry_started": "A new task was created for {count} failed file(s).",
     "retry_error": "Could not retry the failed files.",
-    "export_json": "Export JSON",
+    "cancel": "Cancel ZIP",
+    "cancel_error": "Could not cancel and remove the ZIP.",
     "export_text": "Export text",
     "reason_unsupported_hls": "HLS streaming is not supported in ZIP files",
     "reason_unsupported_dash": "DASH streaming is not supported in ZIP files",
+    "reason_pixeldrain_hotlink": "Pixeldrain blocked the direct download of this file due to hotlink protection. Open the file on Pixeldrain to verify access.",
     "error": {
       "queue_full": "The download queue is full. Please try again later.",
       "ip_limit": "You already have too many ZIP tasks in progress.",
@@ -183,7 +193,14 @@
     }
   },
   "modal": {
-    "unsupported_preview": "Preview not supported for this file type."
+    "unsupported_preview": "Preview not supported for this file type.",
+    "previous": "Previous media",
+    "next": "Next media",
+    "audio_waveform": "Waveform of the playing audio",
+    "waveform_fallback": "The waveform is unavailable; use the player controls."
+  },
+  "quality": {
+    "choose": "Quality"
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",

@@ -1,0 +1,10 @@
+{$WEBSCOPE_DOMAIN:localhost} {
+  encode zstd gzip
+
+  reverse_proxy webscope:3006 {
+    transport http {
+      dial_timeout 10s
+      response_header_timeout 5m
+    }
+  }
+}

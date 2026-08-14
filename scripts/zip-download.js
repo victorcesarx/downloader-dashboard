@@ -1,7 +1,7 @@
 import { store } from './state.js';
-import { Toast, apiFetch, playBeep, showSystemNotification } from './utils.js';
+import { Toast, apiFetch, playBeep, sanitizeHtml, showSystemNotification } from './utils.js';
 import { t } from './i18n.js';
-import { summarizeMediaSizes } from './media-size.js';
+import { formatMediaSize, summarizeMediaSizes } from './media-size.js';
 import { addZipQueueTask, getZipQueueTasks, removeZipQueueTask, updateZipQueueTask } from './zip-queue.js';
 import { openRightPanel } from './right-panel.js';
 
@@ -40,18 +40,21 @@ export async function startZipDownload() {
     return;
   }
 
-  const zipName = await promptZipName();
-  if (zipName === null) return;
+  const zipOptions = await promptZipOptions(downloadable);
+  if (zipOptions === null) return;
+  const { name: zipName, items: orderedItems } = zipOptions;
 
   try {
     const res = await apiFetch('/download-zip', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        items: downloadable.map(item => ({
+        items: orderedItems.map(item => ({
           name: item.name,
           url: item.url,
-          ext: item.ext
+          ext: item.ext,
+          source: item.source,
+          mimeType: item.mimeType
         })),
         ignoredItems: selectedItems
           .filter(item => item.delivery === 'hls' || item.delivery === 'dash')
@@ -75,12 +78,12 @@ export async function startZipDownload() {
     const finalName = (zipName || 'webscope_media_pack');
     activeTasks.set(taskId, finalName.endsWith('.zip') ? finalName : finalName + '.zip');
 
-    const { knownBytes: totalBytes, unknownCount } = summarizeMediaSizes(downloadable);
-    store.state.activeZipTask = { taskId, total: downloadable.length, totalBytes, unknownCount, progress: 0 };
+    const { knownBytes: totalBytes, unknownCount } = summarizeMediaSizes(orderedItems);
+    store.state.activeZipTask = { taskId, total: orderedItems.length, totalBytes, unknownCount, progress: 0 };
     addZipQueueTask({
       taskId,
       name: finalName.endsWith('.zip') ? finalName : `${finalName}.zip`,
-      total: downloadable.length,
+      total: orderedItems.length,
       totalBytes,
       unknownCount,
       totalLength: totalBytes,
@@ -106,13 +109,13 @@ export function startPollingStatus(taskId) {
       if (data.status === 'completed') {
         clearInterval(interval);
         pollingIntervals.delete(taskId);
-        store.state.activeZipTask = null;
+        if (store.state.activeZipTask?.taskId === taskId) store.state.activeZipTask = null;
         onZipCompleted(taskId);
       } else if (data.status === 'error' || data.status === 'cancelled') {
         clearInterval(interval);
         pollingIntervals.delete(taskId);
         activeTasks.delete(taskId);
-        store.state.activeZipTask = null;
+        if (store.state.activeZipTask?.taskId === taskId) store.state.activeZipTask = null;
         // task.error traz o código (ex.: ZIP_TEMP_STORAGE_FULL) ou uma mensagem
         // livre; códigos conhecidos são convertidos em chave i18n, o restante
         // usa a própria mensagem do servidor (ou o fallback zip.task_error).
@@ -175,16 +178,21 @@ function showZipPanelError(taskId, message) {
 
 export async function cancelZipTask(taskId) {
   activeTasks.delete(taskId);
-  store.state.activeZipTask = null;
+  if (store.state.activeZipTask?.taskId === taskId) store.state.activeZipTask = null;
   const interval = pollingIntervals.get(taskId);
   if (interval) {
     clearInterval(interval);
     pollingIntervals.delete(taskId);
   }
   try {
-    await apiFetch(`/download-zip/cancel/${taskId}`);
-  } catch (e) {}
-  removeZipQueueTask(taskId);
+    const response = await apiFetch(`/download-zip/cancel/${taskId}`);
+    if (!response.ok) throw new Error(t('zip.cancel_error'));
+    removeZipQueueTask(taskId);
+    return true;
+  } catch (error) {
+    Toast.show(error.message || t('zip.cancel_error'), 'error');
+    return false;
+  }
 }
 
 export function downloadZipResult(taskId) {
@@ -269,17 +277,26 @@ export function exportZipReport(taskId, format = 'json') {
   return true;
 }
 
-function promptZipName() {
+function promptZipOptions(items) {
   return new Promise(resolve => {
+    const orderedItems = [...items];
     const overlay = document.createElement('div');
     overlay.className = 'rename-overlay';
     overlay.innerHTML = `
-      <div class="rename-dialog">
+      <div class="rename-dialog zip-organizer-dialog" role="dialog" aria-modal="true" aria-labelledby="zip-organizer-title">
+        <div class="zip-organizer-header">
+          <div>
+            <h3 id="zip-organizer-title">${t('zip.organize_title')}</h3>
+            <p>${t('zip.organize_hint')}</p>
+          </div>
+        </div>
         <label class="rename-label" data-i18n="zip.rename_label">${t('zip.rename_label')}</label>
         <div class="rename-input-group">
           <input class="rename-input" type="text" value="webscope_media_pack" spellcheck="false" autofocus>
           <span class="rename-input-suffix">.zip</span>
         </div>
+        <div class="zip-organizer-list" role="list" aria-label="${t('zip.organize_list')}"></div>
+        <p class="zip-organizer-status" aria-live="polite"></p>
         <div class="rename-actions">
           <button class="btn btn-secondary btn-sm rename-cancel" data-i18n="actions.cancel">${t('actions.cancel')}</button>
           <button class="btn btn-primary btn-sm rename-confirm" data-i18n="zip.start">${t('zip.start')}</button>
@@ -290,6 +307,58 @@ function promptZipName() {
     const input = overlay.querySelector('.rename-input');
     const confirmBtn = overlay.querySelector('.rename-confirm');
     const cancelBtn = overlay.querySelector('.rename-cancel');
+    const list = overlay.querySelector('.zip-organizer-list');
+    const status = overlay.querySelector('.zip-organizer-status');
+    let draggedIndex = null;
+
+    function moveItem(from, to, focus = true) {
+      if (from === to || to < 0 || to >= orderedItems.length) return;
+      const [moved] = orderedItems.splice(from, 1);
+      orderedItems.splice(to, 0, moved);
+      renderItems(focus ? to : null);
+      status.textContent = t('zip.organize_moved', { name: moved.name, position: to + 1 });
+    }
+
+    function renderItems(focusIndex = null) {
+      list.innerHTML = orderedItems.map((item, index) => `
+        <div class="zip-organizer-item" draggable="true" tabindex="0" role="listitem" data-index="${index}">
+          <span class="zip-organizer-grip" aria-hidden="true">⋮⋮</span>
+          <span class="zip-organizer-position">${index + 1}</span>
+          <span class="zip-organizer-name" title="${sanitizeHtml(item.name)}">${sanitizeHtml(item.name)}</span>
+          <span class="zip-organizer-size">${formatMediaSize(item.size)}</span>
+          <span class="zip-organizer-controls">
+            <button class="zip-order-btn" type="button" data-move="up" aria-label="${t('zip.move_up')}" ${index === 0 ? 'disabled' : ''}>↑</button>
+            <button class="zip-order-btn" type="button" data-move="down" aria-label="${t('zip.move_down')}" ${index === orderedItems.length - 1 ? 'disabled' : ''}>↓</button>
+          </span>
+        </div>`).join('');
+
+      list.querySelectorAll('.zip-organizer-item').forEach(row => {
+        const index = Number(row.dataset.index);
+        row.addEventListener('dragstart', event => {
+          draggedIndex = index;
+          row.classList.add('dragging');
+          event.dataTransfer?.setData('text/plain', String(index));
+        });
+        row.addEventListener('dragend', () => {
+          draggedIndex = null;
+          row.classList.remove('dragging');
+        });
+        row.addEventListener('dragover', event => event.preventDefault());
+        row.addEventListener('drop', event => {
+          event.preventDefault();
+          const from = draggedIndex ?? Number(event.dataTransfer?.getData('text/plain'));
+          if (Number.isInteger(from)) moveItem(from, index);
+        });
+        row.addEventListener('keydown', event => {
+          if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+          event.preventDefault();
+          moveItem(index, index + (event.key === 'ArrowUp' ? -1 : 1));
+        });
+        row.querySelector('[data-move="up"]')?.addEventListener('click', () => moveItem(index, index - 1));
+        row.querySelector('[data-move="down"]')?.addEventListener('click', () => moveItem(index, index + 1));
+      });
+      if (focusIndex !== null) list.querySelector(`[data-index="${focusIndex}"]`)?.focus();
+    }
 
     function close(result) {
       overlay.remove();
@@ -297,7 +366,10 @@ function promptZipName() {
       resolve(result);
     }
 
-    confirmBtn.addEventListener('click', () => close((input.value.trim() || 'webscope_media_pack') + '.zip'));
+    confirmBtn.addEventListener('click', () => close({
+      name: (input.value.trim() || 'webscope_media_pack') + '.zip',
+      items: orderedItems,
+    }));
     cancelBtn.addEventListener('click', () => close(null));
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') confirmBtn.click();
@@ -306,8 +378,13 @@ function promptZipName() {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) cancelBtn.click();
     });
+    overlay.addEventListener('keydown', event => {
+      if (event.key === 'Escape') cancelBtn.click();
+    });
 
     document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+    renderItems();
     requestAnimationFrame(() => input.select());
   });
 }

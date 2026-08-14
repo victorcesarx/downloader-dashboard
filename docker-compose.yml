@@ -1,0 +1,47 @@
+name: webscope
+
+services:
+  webscope:
+    image: webscope:${WEBSCOPE_IMAGE_TAG:-local}
+    build:
+      context: .
+      target: runtime
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-3006}:3006"
+    environment:
+      PORT: "3006"
+      TEMP_DIR: /app/temp_zips
+      DOWNDASH_TOKEN: "${DOWNDASH_TOKEN:-}"
+      GOFILE_TOKEN: "${GOFILE_TOKEN:-}"
+      GOFILE_WT_SALT: "${GOFILE_WT_SALT:-}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      LOG_FORMAT: "${LOG_FORMAT:-json}"
+      ZIP_MAX_ITEMS: "${ZIP_MAX_ITEMS:-200}"
+      ZIP_FETCH_TIMEOUT_MS: "${ZIP_FETCH_TIMEOUT_MS:-30000}"
+      ZIP_MAX_TOTAL_BYTES: "${ZIP_MAX_TOTAL_BYTES:-10737418240}"
+      ZIP_MAX_TEMP_BYTES: "${ZIP_MAX_TEMP_BYTES:-10737418240}"
+      ZIP_MAX_TASKS_PER_IP: "${ZIP_MAX_TASKS_PER_IP:-2}"
+    volumes:
+      - webscope-temp:/app/temp_zips
+    tmpfs:
+      - /tmp:size=64m,mode=1777,nosuid,nodev,noexec
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: ${WEBSCOPE_PIDS_LIMIT:-200}
+    mem_limit: ${WEBSCOPE_MEMORY_LIMIT:-1g}
+    cpus: ${WEBSCOPE_CPU_LIMIT:-1.0}
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3006)+'/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  webscope-temp:

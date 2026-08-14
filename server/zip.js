@@ -4,7 +4,9 @@ import archiver from 'archiver';
 import { Readable, Transform } from 'stream';
 import { fileURLToPath } from 'url';
 import { TEMP_DIR, ZIP_CONCURRENCY, PORT, ZIP_TASK_CONCURRENCY, ZIP_MAX_QUEUED_TASKS, ZIP_FETCH_TIMEOUT_MS, ZIP_MAX_TEMP_BYTES, ZIP_MAX_TOTAL_BYTES } from './config.js';
+import { increment, logger, observe } from './observability.js';
 import { createZipTaskQueue } from './zip-queue.js';
+import { getGoFileDownloadHeaders, isGoFileUrl } from './scrapers/gofile.js';
 
 const SERVER_BASE = `http://localhost:${PORT}`;
 import { sanitizeZipName } from './utils.js';
@@ -262,7 +264,7 @@ export async function createZipTask(taskId, items, options = {}) {
       outcome: 'pending',
       reason: null,
       httpStatus: null,
-      item: { name: item.name, url: item.url, ext: item.ext }
+      item: { name: item.name, url: item.url, ext: item.ext, source: item.source, mimeType: item.mimeType }
     })),
     ignoredResults: (options.ignoredItems || []).map((item, index) => ({
       index,
@@ -306,6 +308,8 @@ export async function runZipTask(taskId, items, options = {}) {
 
   task.status = 'processing';
   task.startTime = Date.now();
+  increment('webscope_zip_task_runs_total', { outcome: 'started' });
+  logger.info('zip.task.started', { taskId, itemCount: items.length });
 
   const abortController = new AbortController();
   task.abortController = abortController;
@@ -316,7 +320,8 @@ export async function runZipTask(taskId, items, options = {}) {
   const tempDirUsage = await getDirSizeBytes(baseTempDir);
   task.tempBytes = tempDirUsage;
   if (tempDirUsage >= maxTempBytes) {
-    console.error(`[ZIP] Task ${taskId}: temp storage full (${tempDirUsage} bytes >= ${maxTempBytes})`);
+    increment('webscope_zip_task_runs_total', { outcome: 'storage_full' });
+    logger.error('zip.task.storage_full', { taskId, tempBytes: tempDirUsage, maxTempBytes });
     await cleanupZipTask(task, { status: 'error', error: 'ZIP_TEMP_STORAGE_FULL', abort: true });
     return;
   }
@@ -335,6 +340,7 @@ export async function runZipTask(taskId, items, options = {}) {
   // arquivo da lista; o arquivo só pode ser removido depois que o archiver
   // terminou de lê-lo (no Windows, unlink com handle aberto falharia).
   const pendingTmp = [];
+  const downloadedEntries = [];
   archive.on('entry', () => {
     const tmpPath = pendingTmp.shift();
     if (tmpPath) removeZipFile(tmpPath);
@@ -386,9 +392,10 @@ export async function runZipTask(taskId, items, options = {}) {
     task.tmpDir = path.join(options.tempDir || TEMP_DIR, `${taskId}_items`);
     fs.mkdirSync(task.tmpDir, { recursive: true });
 
-    function createProgressTransform() {
+    function createProgressTransform(onProgress) {
       return new Transform({
         transform(chunk, encoding, callback) {
+          onProgress?.();
           task.currentBytes += chunk.length;
           task.tempBytes += chunk.length;
           // Limite de tamanho total do pacote: o chunk atual empurraria o total
@@ -422,11 +429,11 @@ export async function runZipTask(taskId, items, options = {}) {
     // buffer em memória). O archiver nunca recebe um stream que pode falhar:
     // apenas arquivos completos são anexados, o que evita entrada truncada e
     // a trava da fila do archiver (que não sabe descartar uma entrada parcial).
-    function streamItemToDisk(body, tmpPath) {
+    function streamItemToDisk(body, tmpPath, onProgress) {
       return new Promise((resolve) => {
         const tmpOutput = fs.createWriteStream(tmpPath);
         const nodeStream = Readable.fromWeb(body);
-        const progressStream = createProgressTransform();
+        const progressStream = createProgressTransform(onProgress);
         let settled = false;
         let failure = null;
         const done = (result) => {
@@ -473,6 +480,12 @@ export async function runZipTask(taskId, items, options = {}) {
       };
       if (item.url.includes('erome.com')) {
         fetchHeaders['Referer'] = 'https://www.erome.com/';
+        fetchHeaders['Origin'] = 'https://www.erome.com';
+        fetchHeaders['Accept-Encoding'] = 'identity';
+      } else if (item.url.includes('pixeldrain.com')) {
+        fetchHeaders['Referer'] = 'https://pixeldrain.com/';
+      } else if (item.url.includes('imagepond.net')) {
+        fetchHeaders['Referer'] = 'https://www.imagepond.net/';
       }
       const resolved = await resolveItemFetchUrl(item.url);
       if (resolved.error) {
@@ -483,6 +496,9 @@ export async function runZipTask(taskId, items, options = {}) {
         return;
       }
       const fetchUrl = resolved.url;
+      const goFileHeaders = (item.source === 'gofile' || isGoFileUrl(fetchUrl))
+        ? await getGoFileDownloadHeaders()
+        : null;
 
       // Erros de rede no meio do download (ex.: undici 'terminated' quando o
       // host corta a conexão) são transientes: o item é baixado de novo até
@@ -502,7 +518,15 @@ export async function runZipTask(taskId, items, options = {}) {
         const attemptController = new AbortController();
         const onTaskAbort = () => attemptController.abort();
         abortController.signal.addEventListener('abort', onTaskAbort, { once: true });
-        const timeoutTimer = setTimeout(() => attemptController.abort(), fetchTimeoutMs);
+        let timeoutTimer;
+        // O limite representa inatividade de rede, não a duração total do
+        // download. Arquivos grandes podem levar minutos desde que continuem
+        // entregando dados regularmente.
+        const armAttemptTimeout = () => {
+          clearTimeout(timeoutTimer);
+          timeoutTimer = setTimeout(() => attemptController.abort(), fetchTimeoutMs);
+        };
+        armAttemptTimeout();
         try {
           // Redirects não são seguidos automaticamente (redirect: 'manual').
           // Seguimos o máximo de MAX_REDIRECTS, resolvendo URL relativa contra
@@ -514,7 +538,12 @@ export async function runZipTask(taskId, items, options = {}) {
           let failed = false;
           let itemRes;
           while (true) {
-            itemRes = await fetch(currentUrl, { headers: fetchHeaders, signal: attemptController.signal, redirect: 'manual' });
+            // Account credentials are attached only while the destination is
+            // still a GoFile host, so a redirect can never leak the token.
+            const requestHeaders = isGoFileUrl(currentUrl) && goFileHeaders
+              ? { ...fetchHeaders, ...goFileHeaders }
+              : fetchHeaders;
+            itemRes = await fetch(currentUrl, { headers: requestHeaders, signal: attemptController.signal, redirect: 'manual' });
             if (!(itemRes.status >= 300 && itemRes.status < 400)) break;
 
             const location = itemRes.headers.get('location');
@@ -544,10 +573,32 @@ export async function runZipTask(taskId, items, options = {}) {
           if (failed) break;
           if (!itemRes.ok) {
             console.warn(`[ZIP] Task ${taskId}: HTTP ${itemRes.status} for ${item.url}`);
-            recordFailure(itemIdx, { status: itemRes.status });
+            let error = null;
+            if (itemRes.status === 403 && fetchUrl.includes('pixeldrain.com')) {
+              const payload = await itemRes.json().catch(() => null);
+              if (payload?.value === 'file_rate_limited_captcha_required') {
+                error = 'PIXELDRAIN_HOTLINK_PROTECTION';
+              }
+            }
+            recordFailure(itemIdx, { status: itemRes.status, error });
             break;
           }
           if (task.status !== 'processing') return;
+
+          // GoFile may return a small JSON/HTML access page with HTTP 200 when
+          // the CDN session is missing or rejected. Never archive that payload
+          // as though it were the requested media.
+          if (item.source === 'gofile' || isGoFileUrl(fetchUrl)) {
+            const responseType = String(itemRes.headers?.get('content-type') || '').split(';')[0].toLowerCase();
+            const expectedType = String(item.mimeType || '').split(';')[0].toLowerCase();
+            const isAccessPayload = (responseType === 'application/json' || responseType === 'text/html')
+              && responseType !== expectedType;
+            if (isAccessPayload) {
+              try { await itemRes.body?.cancel(); } catch (e) {}
+              recordFailure(itemIdx, { error: 'GOFILE_DOWNLOAD_ACCESS_DENIED' });
+              break;
+            }
+          }
 
           // Limite de tamanho total do pacote: quando o servidor anuncia
           // Content-Length, conferimos antes de tocar no corpo. Se o anúncio já
@@ -562,13 +613,22 @@ export async function runZipTask(taskId, items, options = {}) {
           }
 
           if (itemRes.body && typeof itemRes.body.getReader === 'function') {
-            const result = await streamItemToDisk(itemRes.body, tmpPath);
+            const result = await streamItemToDisk(itemRes.body, tmpPath, armAttemptTimeout);
             if (result.outcome === 'cancelled') {
               await removeZipFile(tmpPath);
               return;
             }
             if (result.outcome === 'error') {
               await removeZipFile(tmpPath);
+              if (attemptController.signal.aborted && task.status === 'processing') {
+                console.error(`[ZIP] Task ${taskId}: timeout for ${item.name}: no data received for ${fetchTimeoutMs}ms (attempt ${attempt + 1}/${MAX_ITEM_RETRIES + 1})`);
+                if (attempt < MAX_ITEM_RETRIES) {
+                  await delay(retryDelayMs * (attempt + 1));
+                  continue;
+                }
+                recordFailure(itemIdx, { error: `request timed out after ${fetchTimeoutMs}ms without data` });
+                break;
+              }
               // Estouro do limite global de disco é fatal para a tarefa: a
               // escrita já está interrompida e o cleanup idempotente remove os
               // arquivos .part e o ZIP parcial.
@@ -591,9 +651,8 @@ export async function runZipTask(taskId, items, options = {}) {
               recordFailure(itemIdx, { error: result.error?.message || 'download failed' });
               break;
             }
-            archive.append(fs.createReadStream(tmpPath), { name: safeName });
-            pendingTmp.push(tmpPath);
-            console.log(`[ZIP] Task ${taskId}: appended ${item.name} (${(task.currentBytes / 1024 / 1024).toFixed(1)} MB total)`);
+            downloadedEntries[itemIdx] = { name: safeName, tmpPath };
+            console.log(`[ZIP] Task ${taskId}: downloaded ${item.name} (${(task.currentBytes / 1024 / 1024).toFixed(1)} MB total)`);
           } else {
             const buffer = Buffer.from(await itemRes.arrayBuffer());
             task.currentBytes += buffer.length;
@@ -604,9 +663,8 @@ export async function runZipTask(taskId, items, options = {}) {
               break;
             }
             task.totalBytes += buffer.length;
-            archive.append(buffer, { name: safeName });
-            pendingTmp.push(null);
-            console.log(`[ZIP] Task ${taskId}: appended ${item.name} (${(task.currentBytes / 1024 / 1024).toFixed(1)} MB total)`);
+            downloadedEntries[itemIdx] = { name: safeName, buffer };
+            console.log(`[ZIP] Task ${taskId}: downloaded ${item.name} (${(task.currentBytes / 1024 / 1024).toFixed(1)} MB total)`);
           }
           recordCompleted(itemIdx);
           break;
@@ -664,6 +722,19 @@ export async function runZipTask(taskId, items, options = {}) {
 
     if (task.status === 'processing') {
       try {
+        // Downloads podem terminar fora de ordem por causa da concorrência.
+        // A inserção no archive ocorre somente agora, seguindo os índices do
+        // payload para preservar exatamente a ordem definida pelo usuário.
+        for (const entry of downloadedEntries) {
+          if (!entry) continue;
+          if (entry.tmpPath) {
+            archive.append(fs.createReadStream(entry.tmpPath), { name: entry.name });
+            pendingTmp.push(entry.tmpPath);
+          } else {
+            archive.append(entry.buffer, { name: entry.name });
+            pendingTmp.push(null);
+          }
+        }
         await archive.finalize();
       } catch (err) {
         console.error(`[ZIP] Task ${taskId}: finalize error - ${err.message}`);
@@ -676,12 +747,19 @@ export async function runZipTask(taskId, items, options = {}) {
         destroyStreams: false,
         error: errors.length > 0 ? `${errors.length} file(s) failed to download` : null
       });
-      console.log(`[ZIP] Task ${taskId}: completed (${items.length - errors.length}/${items.length} files)`);
+      const outcome = errors.length > 0 ? 'partial' : 'completed';
+      increment('webscope_zip_task_runs_total', { outcome });
+      increment('webscope_zip_files_total', { outcome: 'completed' }, items.length - errors.length);
+      increment('webscope_zip_files_total', { outcome: 'failed' }, errors.length);
+      observe('webscope_zip_task_duration_seconds', (Date.now() - task.startTime) / 1000, { outcome });
+      logger.info('zip.task.completed', { taskId, completedItems: items.length - errors.length, failedItems: errors.length });
     } else {
       await cleanupZipTask(task, { abort: true });
     }
   } catch (err) {
-    console.error(`[ZIP] Task ${taskId}: fatal error - ${err.message}`);
+    increment('webscope_zip_task_runs_total', { outcome: 'error' });
+    observe('webscope_zip_task_duration_seconds', (Date.now() - task.startTime) / 1000, { outcome: 'error' });
+    logger.error('zip.task.failed', { taskId, error: err });
     await cleanupZipTask(task, { status: 'error', error: err.message, abort: true });
   }
 }

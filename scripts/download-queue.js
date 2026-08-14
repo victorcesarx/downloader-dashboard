@@ -6,6 +6,7 @@ import { getActiveRightPanel, setOnRightPanelChange, closeRightPanel, toggleRigh
 import { getZipQueueTasks, subscribeZipQueue } from './zip-queue.js';
 import { cancelZipTask, dismissZipTask, downloadZipResult, exportZipReport, retryZipFailures } from './zip-download.js';
 import { closeIconSvg } from './icons.js';
+import { updateFaviconProgress } from './favicon-progress.js';
 
 let panel = null;
 let badge = null;
@@ -192,7 +193,6 @@ function getOrCreatePanel() {
       if (action === 'cancel') cancelZipTask(id);
       if (action === 'download-zip') downloadZipResult(id);
       if (action === 'retry-failures') retryZipFailures(id);
-      if (action === 'export-json') exportZipReport(id, 'json');
       if (action === 'export-text') exportZipReport(id, 'text');
       if (action === 'dismiss') dismissZipTask(id);
       return;
@@ -235,6 +235,7 @@ function zipReportReason(reason) {
     'unsupported dash': 'zip.reason_unsupported_dash',
     ZIP_SIZE_LIMIT_EXCEEDED: 'zip.error.size_limit_exceeded',
     ZIP_TEMP_STORAGE_FULL: 'zip.error.temp_storage_full',
+    PIXELDRAIN_HOTLINK_PROTECTION: 'zip.reason_pixeldrain_hotlink',
   };
   return known[reason] ? t(known[reason]) : reason;
 }
@@ -319,11 +320,10 @@ function renderList() {
 
     const actionsHtml = isZip
       ? `<div class="queue-item-actions ${isDone || isError ? 'queue-item-history-actions' : ''}">
-          ${!isDone && !isError && !isZipReady ? `<button class="btn btn-secondary btn-sm queue-btn" data-kind="zip" data-action="cancel" data-id="${ad.taskId}">${t('dl.cancel')}</button>` : ''}
+          <button class="btn btn-secondary btn-sm queue-btn" data-kind="zip" data-action="cancel" data-id="${ad.taskId}">${t('zip.cancel')}</button>
           ${isZipReady ? `<button class="btn btn-primary btn-sm queue-btn" data-kind="zip" data-action="download-zip" data-id="${ad.taskId}">${t('zip.download_btn')}</button>` : ''}
           ${reportCounts.failed ? `<button class="btn btn-secondary btn-sm queue-btn" data-kind="zip" data-action="retry-failures" data-id="${ad.taskId}">${t('zip.retry_failed', { count: reportCounts.failed })}</button>` : ''}
-          ${zipReport.length ? `<button class="btn btn-secondary btn-sm queue-btn" data-kind="zip" data-action="export-json" data-id="${ad.taskId}">${t('zip.export_json')}</button>
-          <button class="btn btn-secondary btn-sm queue-btn" data-kind="zip" data-action="export-text" data-id="${ad.taskId}">${t('zip.export_text')}</button>` : ''}
+          ${zipReport.length ? `<button class="btn btn-secondary btn-sm queue-btn" data-kind="zip" data-action="export-text" data-id="${ad.taskId}">${t('zip.export_text')}</button>` : ''}
           ${isDone || isError ? `<button class="btn btn-secondary btn-sm queue-btn" data-kind="zip" data-action="dismiss" data-id="${ad.taskId}">${t('queue.remove')}</button>` : ''}
         </div>`
       : !isDone && !isError
@@ -359,8 +359,8 @@ function renderList() {
 }
 
 function updateBadge() {
-  const downloads = [...getActiveDownloads().values(), ...getZipQueueTasks().values()];
-  const count = downloads.filter(ad => ad.state !== 'error' && !ad._done).length;
+  const count = classifyDownloads().active.length;
+  updateFaviconProgress(count, store.state.faviconBadgeEnabled);
 
   const sub = panel && panel.querySelector('.queue-panel-subtext');
   if (sub) {
@@ -424,6 +424,7 @@ export function initQueue() {
     localeListenerInstalled = true;
     store.subscribe((property) => {
       if (property === 'lang') renderPanelLocale();
+      else if (property === 'faviconBadgeEnabled') updateBadge();
     });
   }
   updateBadge();

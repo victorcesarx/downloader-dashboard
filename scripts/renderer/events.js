@@ -8,6 +8,7 @@ import { updateBatchActionsUI, updateCardSize } from './batch.js';
 import { renderMediaContainer } from './index.js';
 import { TYPE_ICON_MAP } from './cards.js';
 import { openMediaInspector } from '../media-inspector.js';
+import { getDisplayItems } from './display.js';
 
 // Imagem quebrada (CSP bloqueia `onerror` inline): evento `error` não
 // borbulha — escuta na fase de captura e troca pela thumbnail por um
@@ -43,6 +44,10 @@ export function attachCardEvents(container, useDelegation = false) {
       if (vsel) handleVariantChange(vsel);
     });
     container.addEventListener('click', (e) => {
+      const qualityChoice = e.target.closest('.embedded-quality-choice');
+      const variantChoice = e.target.closest('.variant-choice');
+      if (qualityChoice) activateVisualChoice(qualityChoice, '.quality-select');
+      if (variantChoice) activateVisualChoice(variantChoice, '.variant-select');
       const db = e.target.closest('.download-btn');
       const pb = e.target.closest('.preview-btn');
       const cb = e.target.closest('.copy-link-btn');
@@ -51,6 +56,7 @@ export function attachCardEvents(container, useDelegation = false) {
       if (pb) handlePreviewClick(pb);
       if (cb) handleCopyClick(cb);
       if (ib) handleInspectClick(ib);
+      if (!db && !pb && !cb && !ib && !qualityChoice && !variantChoice) handleCardClick(e);
     });
     return;
   }
@@ -76,6 +82,39 @@ export function attachCardEvents(container, useDelegation = false) {
   container.querySelectorAll('.inspect-btn').forEach(btn => {
     btn.addEventListener('click', () => handleInspectClick(btn));
   });
+  container.querySelectorAll('.media-card').forEach(card => {
+    card.addEventListener('click', e => handleCardClick(e));
+  });
+  container.querySelectorAll('.embedded-quality-choice').forEach(button => button.addEventListener('click', () => activateVisualChoice(button, '.quality-select')));
+  container.querySelectorAll('.variant-choice').forEach(button => button.addEventListener('click', () => activateVisualChoice(button, '.variant-select')));
+}
+
+function activateVisualChoice(button, selectSelector) {
+  const picker = button.closest('.quality-picker');
+  const select = picker?.parentElement?.querySelector(selectSelector);
+  if (!select) return;
+  select.value = button.dataset.value;
+  picker.querySelectorAll('.quality-choice').forEach(choice => {
+    const selected = choice === button;
+    choice.classList.toggle('selected', selected);
+    choice.setAttribute('aria-pressed', String(selected));
+  });
+  const label = button.querySelector('strong')?.textContent;
+  if (label) picker.querySelector('summary').textContent = label;
+  picker.removeAttribute('open');
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function handleCardClick(event) {
+  if (event.target.closest('button, a, input, select, textarea, label')) return;
+  const preview = event.target.closest('.card-media-preview');
+  if (!preview) return;
+  const card = preview.closest('.media-card');
+  if (!card) return;
+  const item = store.state.items.find(candidate => String(candidate.id) === String(card.dataset.id));
+  if (!item || !['video', 'image', 'audio'].includes(item.type)) return;
+  if (item.openInBrowser) window.open(item.url, '_blank');
+  else openPreviewModal(item, getDisplayItems());
 }
 
 function handleInspectClick(btn) {
@@ -144,7 +183,7 @@ function handlePreviewClick(btn) {
   const item = store.state.items.find(i => i.id === id);
   if (item) {
     if (item.openInBrowser) window.open(item.url, '_blank');
-    else openPreviewModal(item);
+    else openPreviewModal(item, getDisplayItems());
   }
 }
 

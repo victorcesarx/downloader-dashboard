@@ -107,6 +107,9 @@ describe('Toast', () => {
     const toastContainer = document.getElementById('toast-container');
     const toast = toastContainer.querySelector('.toast');
     expect(toast.className).toBe('toast toast-error');
+    expect(toast.getAttribute('role')).toBe('alert');
+    expect(toast.querySelector('.toast-icon svg')).not.toBeNull();
+    expect(toast.querySelector('.toast-close')).not.toBeNull();
   });
 
   it('sanitizes message before rendering', () => {
@@ -115,6 +118,23 @@ describe('Toast', () => {
     const toast = toastContainer.querySelector('.toast');
     expect(toast.innerHTML).not.toContain('<script>');
     expect(toast.innerHTML).toContain('&lt;script&gt;');
+  });
+
+  it('limits visible toasts to the four most recent', () => {
+    for (let index = 0; index < 6; index += 1) Toast.show(`Message ${index}`, 'info');
+    const toasts = document.querySelectorAll('#toast-container .toast');
+    expect(toasts).toHaveLength(4);
+    expect(toasts[0].querySelector('.toast-message').textContent).toBe('Message 2');
+  });
+
+  it('can be dismissed from its close button', () => {
+    vi.useFakeTimers();
+    Toast.show('Dismiss me', 'success');
+    document.querySelector('.toast-close').click();
+    expect(document.querySelector('.toast').classList.contains('toast-exit')).toBe(true);
+    vi.advanceTimersByTime(180);
+    expect(document.getElementById('toast-container')).toBeNull();
+    vi.useRealTimers();
   });
 });
 

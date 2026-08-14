@@ -3,7 +3,7 @@ import https from 'https';
 import fs from 'fs';
 import path from 'path';
 
-import { analyzePage } from './server/scrapers/index.js';
+import { analyzePage, identifyScraper } from './server/scrapers/index.js';
 import { scrapeGeneric } from './server/scrapers/generic.js';
 import {
   MIME_TYPES, CACHE_DURATIONS, enrichItemSizes,
@@ -18,6 +18,7 @@ import { scrapeCyberDrop } from './server/scrapers/cyberdrop.js';
 import { scrapeBunkr } from './server/scrapers/bunkr.js';
 import { scrapeErome } from './server/scrapers/erome.js';
 import { scrapeTwitter } from './server/scrapers/twitter.js';
+import { scrapeImagePond } from './server/scrapers/imagepond.js';
 
 import { PORT, TEMP_DIR, AUTH_TOKEN, BODY_LIMIT_AUTH, BODY_LIMIT_ANALYZE, BODY_LIMIT_ZIP, ZIP_MAX_ITEMS, ZIP_MAX_TASKS_PER_IP, httpsOptions, RATE_LIMIT_MAX } from './server/config.js';
 import { rateLimit } from './server/middleware/rate-limit.js';
@@ -27,12 +28,27 @@ import { zipTasks, zipRetryReports, runZipTask, createZipTask, zipTaskQueue, cle
 import { handleProxy } from './server/proxy.js';
 import { serveStatic } from './server/static.js';
 import { probeMedia } from './server/media/probe-media.js';
+import { gauge, increment, installConsoleBridge, logger, observe, renderMetrics, withRequestContext } from './server/observability.js';
+
+installConsoleBridge();
+
+function routeLabel(method, pathname) {
+  if (pathname.startsWith('/download-zip/status/')) return '/download-zip/status/:taskId';
+  if (pathname.startsWith('/download-zip/result/')) return '/download-zip/result/:taskId';
+  if (pathname.startsWith('/download-zip/cancel/')) return '/download-zip/cancel/:taskId';
+  if (pathname.startsWith('/download-zip/retry/')) return '/download-zip/retry/:taskId';
+  const known = ['/health', '/metrics', '/auth', '/analyze', '/proxy', '/media-metadata', '/download-zip'];
+  if (known.includes(pathname)) return pathname;
+  if (method === 'GET' && path.extname(pathname)) return '/static';
+  return pathname === '/' ? '/' : '/unmatched';
+}
 
 // HTTP Server & Route Handler
-const server = http.createServer(async (req, res) => {
+const server = http.createServer(async (req, res) => withRequestContext(req, res, async () => {
   const reqUrl = new URL(req.url, `http://${req.headers.host}`);
   const pathname = reqUrl.pathname;
   const method = req.method;
+  req.observabilityRoute = routeLabel(method, pathname);
 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -43,17 +59,47 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
-  if (!pathname.startsWith('/download-zip/status/')) {
-    console.log(`[${new Date().toISOString()}] ${method} ${pathname}`);
-  }
+  logger.debug('http.request.started', { method, route: req.observabilityRoute });
 
   if (AUTH_TOKEN && pathname !== '/auth' && !pathname.startsWith('/auth?')) {
     const ext = path.extname(pathname).toLowerCase();
     const isStatic = ['.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.mp4', '.webm', '.mp3'].includes(ext);
     const isLocale = pathname.startsWith('/locales/');
-    if (!isStatic && !isLocale && !requireAuth(req, res)) {
+    if (pathname !== '/health' && !isStatic && !isLocale && !requireAuth(req, res)) {
       return sendUnauthorized(res);
     }
+  }
+
+  if (req.method === 'GET' && pathname === '/health') {
+    let tempWritable = true;
+    try {
+      fs.accessSync(TEMP_DIR, fs.constants.R_OK | fs.constants.W_OK);
+    } catch {
+      tempWritable = false;
+    }
+    const healthy = tempWritable;
+    res.writeHead(healthy ? 200 : 503, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+    });
+    return res.end(JSON.stringify({
+      status: healthy ? 'ok' : 'unhealthy',
+      uptimeSeconds: Math.floor(process.uptime()),
+      checks: { tempWritable },
+    }));
+  }
+
+  if (req.method === 'GET' && pathname === '/metrics') {
+    const tasks = [...zipTasks.values()];
+    gauge('webscope_zip_tasks', tasks.filter(task => task.status === 'queued').length, { state: 'queued' });
+    gauge('webscope_zip_tasks', tasks.filter(task => task.status === 'processing').length, { state: 'processing' });
+    const body = renderMetrics();
+    res.writeHead(200, {
+      'Content-Type': 'text/plain; version=0.0.4; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Content-Length': Buffer.byteLength(body),
+    });
+    return res.end(body);
   }
 
   if (AUTH_TOKEN && method === 'POST' && pathname === '/auth') {
@@ -74,6 +120,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && pathname === '/analyze') {
+    const startedAt = process.hrtime.bigint();
+    let scraper = 'unknown';
     const rl = rateLimit(req);
     res.setHeader('X-RateLimit-Limit', RATE_LIMIT_MAX);
     res.setHeader('X-RateLimit-Remaining', rl.remaining);
@@ -89,26 +137,34 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = JSON.parse(bodyStr);
       if (!body.url) {
-        console.warn(`[Analyze] Missing URL in request body`);
+        logger.warn('analysis.rejected', { reason: 'missing_url' });
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'URL is required' }));
       }
 
-      console.log(`[Analyze] Analyzing: ${body.url}`);
+      scraper = identifyScraper(body.url);
+      logger.info('analysis.started', { scraper });
       const result = await analyzePage(body.url);
 
       const count = result?.items?.length || 0;
-      console.log(`[Analyze] Result: ${count} item(s) for ${body.url}`);
+      increment('webscope_analysis_total', { outcome: 'success', scraper });
+      increment('webscope_scraper_requests_total', { outcome: 'success', scraper });
+      increment('webscope_scraper_items_total', { scraper }, count);
+      observe('webscope_analysis_duration_seconds', Number(process.hrtime.bigint() - startedAt) / 1e9, { scraper });
+      logger.info('analysis.completed', { scraper, itemCount: count });
       if (count > 0) {
         await enrichItemSizes(result.items);
       }
       if (count === 0) {
-        console.warn(`[Analyze] No items found for URL: ${body.url}`);
+        logger.warn('analysis.empty', { scraper });
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err) {
-      console.error(`[Analyze] Error: ${err.message}`);
+      increment('webscope_analysis_total', { outcome: 'error', scraper });
+      increment('webscope_scraper_requests_total', { outcome: 'error', scraper });
+      observe('webscope_analysis_duration_seconds', Number(process.hrtime.bigint() - startedAt) / 1e9, { scraper });
+      logger.error('analysis.failed', { scraper, error: err });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
     }
@@ -188,7 +244,8 @@ const server = http.createServer(async (req, res) => {
       }
 
       const taskId = `zip_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      console.log(`[ZIP] Creating task ${taskId} with ${items.length} file(s)`);
+      increment('webscope_zip_tasks_total', { outcome: 'accepted' });
+      logger.info('zip.task.created', { taskId, itemCount: items.length });
 
       // Registra a tarefa com status inicial 'queued' e a coloca na fila.
       createZipTask(taskId, items, { clientIp, ignoredItems });
@@ -213,7 +270,8 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ taskId }));
     } catch (err) {
-      console.error(`[ZIP] Error creating task: ${err.message}`);
+      increment('webscope_zip_tasks_total', { outcome: 'error' });
+      logger.error('zip.task.create_failed', { error: err });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
     }
@@ -299,7 +357,9 @@ const server = http.createServer(async (req, res) => {
     const stat = fs.statSync(task.zipFilePath);
     let filename = reqUrl.searchParams.get('filename') || 'webscope_media_pack.zip';
     if (!filename.endsWith('.zip')) filename += '.zip';
-    console.log(`[ZIP] Serving result: ${taskId} (${(stat.size / 1024 / 1024).toFixed(1)} MB) as ${filename}`);
+    increment('webscope_downloads_total', { kind: 'zip', outcome: 'started' });
+    increment('webscope_download_bytes_total', { kind: 'zip' }, stat.size);
+    logger.info('zip.result.started', { taskId, bytes: stat.size });
 
     let cleaned = false;
     let readStream = null;
@@ -337,6 +397,7 @@ const server = http.createServer(async (req, res) => {
     });
 
     readStream = fs.createReadStream(task.zipFilePath);
+    task.resultReadStream = readStream;
     readStream.on('error', cleanupResult);
     readStream.on('end', cleanupResult);
     readStream.pipe(res);
@@ -346,28 +407,27 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && pathname.startsWith('/download-zip/cancel/')) {
     const taskId = pathname.replace('/download-zip/cancel/', '');
     const task = zipTasks.get(taskId);
+    const hadRetryReport = zipRetryReports.has(taskId);
     if (task) {
-      console.log(`[ZIP] Cancelling task: ${taskId}`);
+      increment('webscope_zip_tasks_total', { outcome: 'cancelled' });
+      logger.info('zip.task.cancelled', { taskId });
       if (task.status === 'queued') {
-        // Tarefa ainda na fila: apenas a remove de waiting e marca como
-        // cancelada sem nunca executar runZipTask (nem criar ZIP/temporários).
         zipTaskQueue.cancel(taskId);
-        task.status = 'cancelled';
-        task.finishedAt = Date.now();
-      } else {
-        await cleanupZipTask(task, { status: 'cancelled', abort: true });
-        await removeZipFile(task.zipFilePath);
-        zipTasks.delete(taskId);
       }
+      task.resultReadStream?.destroy();
+      await cleanupZipTask(task, { status: 'cancelled', abort: true });
+      await removeZipFile(task.zipFilePath);
+      zipTasks.delete(taskId);
     } else {
       console.warn(`[ZIP] Cancel request for unknown task: ${taskId}`);
     }
+    zipRetryReports.delete(taskId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ cancelled: true }));
+    return res.end(JSON.stringify({ cancelled: true, removed: Boolean(task || hadRetryReport) }));
   }
 
   serveStatic(req, res, pathname);
-});
+}));
 
 // Server Startup
 const handler = server;
@@ -375,12 +435,11 @@ const handler = server;
 if (process.env.VITEST) {
 } else if (httpsOptions) {
   https.createServer(httpsOptions, (req, res) => handler.emit('request', req, res)).listen(PORT, () => {
-    console.log(`🚀 WebScope HTTPS running on https://localhost:${PORT}`);
+    logger.info('server.started', { protocol: 'https', port: PORT, authEnabled: Boolean(AUTH_TOKEN) });
   });
 } else {
   handler.listen(PORT, () => {
-    const proto = AUTH_TOKEN ? ' (auth enabled)' : '';
-    console.log(`🚀 WebScope running on http://localhost:${PORT}${proto}`);
+    logger.info('server.started', { protocol: 'http', port: PORT, authEnabled: Boolean(AUTH_TOKEN) });
   });
 }
 
@@ -405,6 +464,7 @@ export {
   scrapeGeneric,
   scrapeErome,
   scrapeTwitter,
+  scrapeImagePond,
   cookieJar,
   zipTasks,
   runZipTask,

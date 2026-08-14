@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { loadLocale } from '../../scripts/i18n.js';
 import { store } from '../../scripts/state.js';
-import { exportZipReport, updateZipPanelUI, startPollingStatus, startZipDownload } from '../../scripts/zip-download.js';
+import { cancelZipTask, exportZipReport, updateZipPanelUI, startPollingStatus, startZipDownload } from '../../scripts/zip-download.js';
 import { addZipQueueTask, clearZipQueueForTests, getZipQueueTasks } from '../../scripts/zip-queue.js';
 import { closeRightPanel, getActiveRightPanel, openRightPanel } from '../../scripts/right-panel.js';
 
@@ -15,6 +15,7 @@ const mockLocales = {
     queued_waiting: 'Aguardando na fila',
     queued_position: 'Aguardando na fila — posição {position}',
     start_error: 'Falha ao iniciar empacotamento ZIP',
+    cancel_error: 'Não foi possível cancelar e remover o ZIP.',
     error: {
       queue_full: 'A fila de downloads está cheia. Tente novamente mais tarde.',
       ip_limit: 'Você já possui muitas tarefas ZIP em andamento.',
@@ -73,7 +74,7 @@ describe('ZIP usa a fila de downloads compartilhada', () => {
     });
   });
 
-  it('exporta o relatório final em JSON e texto', () => {
+  it('exporta o relatório final em texto', () => {
     addZipQueueTask({
       taskId: 'report-1', name: 'pacote.zip', total: 2,
       report: [
@@ -91,9 +92,18 @@ describe('ZIP usa a fila de downloads compartilhada', () => {
       downloads.push(this.download);
     });
 
-    expect(exportZipReport('report-1', 'json')).toBe(true);
     expect(exportZipReport('report-1', 'text')).toBe(true);
-    expect(downloads).toEqual(['pacote-report.json', 'pacote-report.txt']);
+    expect(downloads).toEqual(['pacote-report.txt']);
+  });
+
+  it('só remove a instância local depois que o backend confirma o cancelamento', async () => {
+    addZipQueueTask({ taskId: 'done-1', name: 'pacote.zip', total: 1, state: 'completed' });
+    globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ cancelled: true, removed: true }) }));
+
+    await expect(cancelZipTask('done-1')).resolves.toBe(true);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith('/download-zip/cancel/done-1', {});
+    expect(getZipQueueTasks().has('done-1')).toBe(false);
   });
 
   it('keeps polling while the task stays queued and stops once completed', async () => {
@@ -191,7 +201,7 @@ describe('ZIP start error codes', () => {
 });
 
 // Captura o payload enviado a /download-zip após confirmar o nome do ZIP.
-async function runZipPayload(selectedItems) {
+async function runZipPayload(selectedItems, organize) {
   let capturedBody = null;
   store.state.items = selectedItems;
   store.state.selectedItemIds = new Set(selectedItems.map(i => i.id));
@@ -211,6 +221,7 @@ async function runZipPayload(selectedItems) {
 
   const originalFetch = globalThis.fetch;
   const p = startZipDownload();
+  organize?.(document.querySelector('.zip-organizer-dialog'));
   document.querySelector('.rename-confirm')?.click();
   await p;
   const bodyCall = originalFetch.mock.calls.find(c => String(c[0]).includes('/download-zip'));
@@ -243,6 +254,31 @@ describe('ZIP exclui HLS/DASH do payload', () => {
   const mp4 = { id: 'm1', name: 'clip.mp4', url: 'https://example.com/clip.mp4', ext: 'mp4', size: 100, delivery: 'progressive' };
   const hls = { id: 'h1', name: 'live.m3u8', url: 'https://example.com/live.m3u8', ext: 'm3u8', size: 100, delivery: 'hls' };
   const dash = { id: 'd1', name: 'stream.mpd', url: 'https://example.com/stream.mpd', ext: 'mpd', size: 100, delivery: 'dash' };
+
+  it('envia os arquivos na ordem definida no modal junto com o nome do ZIP', async () => {
+    const second = { ...mp4, id: 'm2', name: 'second.mp4', url: 'https://example.com/second.mp4' };
+    const third = { ...mp4, id: 'm3', name: 'third.mp4', url: 'https://example.com/third.mp4' };
+    const body = await runZipPayload([mp4, second, third], dialog => {
+      dialog.querySelector('.rename-input').value = 'ordem-personalizada';
+      dialog.querySelector('[data-index="2"] [data-move="up"]').click();
+      dialog.querySelector('[data-index="1"] [data-move="up"]').click();
+    });
+
+    expect(body.items.map(item => item.name)).toEqual(['third.mp4', 'clip.mp4', 'second.mp4']);
+    expect(document.querySelector('.zip-organizer-dialog')).toBeNull();
+    expect(getZipQueueTasks().get('z1').name).toBe('ordem-personalizada.zip');
+  });
+
+  it('preserva a origem e o MIME necessários para autenticar downloads GoFile', async () => {
+    const body = await runZipPayload([{
+      ...mp4,
+      source: 'gofile',
+      mimeType: 'video/mp4',
+      url: 'https://store1.gofile.io/download/clip',
+    }]);
+
+    expect(body.items[0]).toMatchObject({ source: 'gofile', mimeType: 'video/mp4' });
+  });
 
   it('abre automaticamente a fila quando o servidor aceita a tarefa ZIP', async () => {
     openRightPanel('preferences');

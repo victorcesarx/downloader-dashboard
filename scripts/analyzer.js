@@ -6,13 +6,16 @@ import { Toast, apiFetch, ensureFileExtension, getUrlExtension } from './utils.j
 import { t } from './i18n.js';
 
 const CACHE_KEY = 'analyze_cache';
-export const ANALYZE_CACHE_SCHEMA_VERSION = 2;
+// v3 invalidates GoFile results cached before source/MIME download metadata
+// was propagated to the ZIP backend.
+export const ANALYZE_CACHE_SCHEMA_VERSION = 3;
 export const ANALYZE_CACHE_TTL_MS = 30 * 60 * 1000;
 export const ANALYZE_CACHE_MAX_ENTRIES = 10;
 export const ANALYZE_CACHE_MAX_BYTES = 1024 * 1024;
 
 function validAnalysis(data) {
   return Boolean(data && typeof data === 'object' && Array.isArray(data.items)
+    && data.items.length > 0
     && data.items.every(item => item && typeof item.url === 'string' && item.url.length > 0));
 }
 
@@ -108,9 +111,12 @@ function buildItems(data) {
       const token = localStorage.getItem('downdash_token');
       return `/proxy?url=${encoded}${token ? `&token=${token}` : ''}`;
     };
-    const proxyThumb = thumb && (thumb.includes('erome.com') || thumb.includes('cyberdrop') || thumb.includes('bunkr') || thumb.includes('pixeldrain.com'))
-      ? baseProxy(thumb)
-      : thumb;
+    const proxiedMedia = (mediaUrl) => {
+      if (!mediaUrl || typeof mediaUrl !== 'string') return null;
+      if (mediaUrl.startsWith('/proxy?') || mediaUrl.startsWith('data:') || mediaUrl.startsWith('blob:')) return mediaUrl;
+      return /^https?:\/\//i.test(mediaUrl) ? baseProxy(mediaUrl) : mediaUrl;
+    };
+    const proxyThumb = proxiedMedia(thumb);
     // Extensão: usa a do scraper; se faltar, tenta extrair da URL; último
     // recurso é "bin". Sempre aplicada ao nome quando ele não termina em
     // extensão, para que o download não chegue "sem formato".
@@ -135,7 +141,8 @@ function buildItems(data) {
       qualities: qualities.map(q => ({
         ...q,
         url: q.url,
-        proxyUrl: baseProxy(q.url)
+        proxyUrl: baseProxy(q.url),
+        thumbnail: proxiedMedia(q.thumbnail)
       })),
       selectedQualityIndex,
       variantCount: variant ? variant.count : 0,
@@ -168,8 +175,15 @@ function buildItems(data) {
 function preselectedIds(data, items) {
   const selected = new Set();
   if (!data || !Array.isArray(data.groups)) return selected;
+  const preferred = store.state.preferredQuality || 'best';
   for (const group of data.groups) {
-    const url = group && group.bestItemUrl;
+    let url = group && group.bestItemUrl;
+    if (preferred !== 'best' && Array.isArray(group?.itemUrls)) {
+      const preferredItem = items.find(item => group.itemUrls.includes(item.sourceUrl || item.url)
+        && (String(item.quality || '').toLowerCase().includes(preferred)
+          || `${item.height || ''}p` === preferred));
+      if (preferredItem) url = preferredItem.sourceUrl || preferredItem.url;
+    }
     if (typeof url !== 'string') continue;
     const match = items.find(item => (item.sourceUrl || item.url) === url);
     if (match) selected.add(match.id);

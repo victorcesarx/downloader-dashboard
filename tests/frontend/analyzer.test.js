@@ -101,6 +101,30 @@ describe('analyzeUrl sem mode', () => {
     expect(globalThis.fetch.mock.calls.filter(c => String(c[0]).endsWith('/analyze'))).toHaveLength(1);
   });
 
+  it('não reutiliza nem persiste resultados vazios', async () => {
+    globalThis.fetch.mockImplementation(async url => {
+      if (String(url).includes('/locales/')) return { ok: true, json: async () => mockLocales };
+      return mockResponse({ ok: true, data: { items: [] } });
+    });
+    await analyzeUrl('https://example.com/empty');
+    await analyzeUrl('https://example.com/empty');
+    expect(globalThis.fetch.mock.calls.filter(call => String(call[0]).endsWith('/analyze'))).toHaveLength(2);
+    expect(sessionStorage.getItem('analyze_cache')).toBeNull();
+  });
+
+  it('carrega thumbnails HTTP pelo proxy e preserva URLs locais', async () => {
+    globalThis.fetch.mockImplementation(async url => {
+      if (String(url).includes('/locales/')) return { ok: true, json: async () => mockLocales };
+      return mockResponse({ ok: true, data: { items: [{
+        type: 'video', url: 'https://cdn.example/video.mp4', thumbnail: 'https://images.example/poster.jpg',
+        qualities: [{ label: '720p', url: 'https://cdn.example/720.mp4', thumbnail: 'https://images.example/720.jpg' }],
+      }] } });
+    });
+    await analyzeUrl('https://example.com/thumbs');
+    expect(store.state.items[0].thumbnail).toContain('/proxy?url=https%3A%2F%2Fimages.example%2Fposter.jpg');
+    expect(store.state.items[0].qualities[0].thumbnail).toContain('/proxy?url=https%3A%2F%2Fimages.example%2F720.jpg');
+  });
+
   it('migra o cache legado válido sem refazer a análise', async () => {
     const legacyData = {
       items: [{ type: 'video', name: 'legacy.mp4', url: 'https://cdn.example/legacy.mp4' }],
@@ -202,6 +226,25 @@ describe('pré-seleção de melhor variante via groups', () => {
 
   const media = (url) => ({
     type: 'video', name: url.split('/').pop(), url, ext: 'mp4',
+  });
+
+  it('aplica a preferência padrão aos grupos quando há metadados compatíveis', async () => {
+    store.state.preferredQuality = '720p';
+    globalThis.fetch = vi.fn(async url => {
+      if (String(url).includes('/locales/')) return { ok: true, json: async () => mockLocales };
+      return mockResponse({ ok: true, data: {
+        items: [
+          { ...media(BEST_URL), quality: '1080p', height: 1080 },
+          { ...media(LOW_URL), quality: '720p', height: 720 },
+        ],
+        groups: [{ key: 'video', itemUrls: [BEST_URL, LOW_URL], bestItemUrl: BEST_URL }],
+      } });
+    });
+
+    await analyzeUrl('https://example.com/preferred-group');
+    const selected = store.state.items.find(item => store.state.selectedItemIds.has(item.id));
+    expect(selected.sourceUrl).toBe(LOW_URL);
+    store.state.preferredQuality = 'best';
   });
 
   function stubAnalyze(data) {

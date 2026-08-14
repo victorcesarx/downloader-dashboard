@@ -127,6 +127,55 @@ describe('selo de entrega nos cards', () => {
     expect(store.state.selectedItemIds.has('a6')).toBe(true);
   });
 
+  it('mantém o seletor de qualidade ao lado do nome e fora dos metadados', async () => {
+    await render([{
+      ...item('quality-heading', 'progressive'),
+      qualities: [
+        { label: '720p', url: 'https://cdn.example.com/720.mp4' },
+        { label: '360p', url: 'https://cdn.example.com/360.mp4' },
+      ],
+    }]);
+
+    const card = document.querySelector('.media-card');
+    expect(card.querySelector('.card-heading > .quality-picker')).not.toBeNull();
+    expect(card.querySelector('.card-meta .quality-picker')).toBeNull();
+    expect(card.querySelector('.quality-picker summary').textContent).toBe('720p');
+
+    card.querySelectorAll('.embedded-quality-choice')[1].click();
+    expect(card.querySelector('.quality-picker summary').textContent).toBe('360p');
+    expect(card.querySelector('.quality-picker summary').textContent).not.toContain('Qualidade');
+  });
+
+  it('abre o preview somente ao clicar na área da thumbnail', async () => {
+    await render([{ ...item('click-preview', 'progressive'), type: 'image', proxyUrl: '/proxy/image' }]);
+
+    document.querySelector('.card-media-preview').click();
+
+    const modal = document.getElementById('preview-modal');
+    expect(modal).not.toBeNull();
+    expect(modal.classList.contains('open')).toBe(true);
+    expect(modal.querySelector('#modal-title').textContent).toBe('click-preview.mp4');
+  });
+
+  it('não abre o preview ao clicar nas informações abaixo da thumbnail', async () => {
+    await render([{ ...item('card-info', 'progressive'), type: 'image', proxyUrl: '/proxy/image' }]);
+
+    document.querySelector('.card-title').click();
+    document.querySelector('.card-meta').click();
+    document.querySelector('.card-body').click();
+
+    expect(document.getElementById('preview-modal')).toBeNull();
+  });
+
+  it('checkbox seleciona sem abrir o preview do card', async () => {
+    await render([{ ...item('checkbox-only', 'progressive'), type: 'image', proxyUrl: '/proxy/image' }]);
+
+    document.querySelector('.card-checkbox').click();
+
+    expect(document.getElementById('preview-modal')).toBeNull();
+    expect(store.state.selectedItemIds.has('checkbox-only')).toBe(true);
+  });
+
   it('HLS não inicia download', async () => {
     await render([item('a7', 'hls')]);
     const downloadModule = await import('../../scripts/download.js');
@@ -173,7 +222,7 @@ describe('selo de entrega nos cards', () => {
   });
 });
 
-describe('selo de variantes nos cards', () => {
+describe('variantes sem selo redundante nos cards', () => {
   beforeEach(async () => {
     store.state.lang = 'pt-BR';
     globalThis.fetch = vi.fn(async (url) => {
@@ -192,25 +241,18 @@ describe('selo de variantes nos cards', () => {
     document.body.innerHTML = '';
   });
 
-  it('grupo com 2 itens mostra "2 variantes"', async () => {
+  it('grupo com 2 itens não mostra selo de variantes', async () => {
     await render([item('v1', 'progressive', 2), item('v2', 'progressive', 2)]);
 
     const badges = document.querySelectorAll('.media-badge--variants');
-    expect(badges).toHaveLength(2);
-    for (const badge of badges) {
-      expect(badge.textContent).toBe('2 variantes');
-      expect(badge.classList.contains('media-badge--variants')).toBe(true);
-    }
+    expect(badges).toHaveLength(0);
   });
 
-  it('grupo com 3 itens mostra "3 variantes"', async () => {
+  it('grupo com 3 itens não mostra selo de variantes', async () => {
     await render([item('w1', 'progressive', 3), item('w2', 'progressive', 3), item('w3', 'progressive', 3)]);
 
     const badges = document.querySelectorAll('.media-badge--variants');
-    expect(badges).toHaveLength(3);
-    for (const badge of badges) {
-      expect(badge.textContent).toBe('3 variantes');
-    }
+    expect(badges).toHaveLength(0);
   });
 
   it('grupo com item único não mostra selo', async () => {
@@ -236,7 +278,7 @@ describe('selo de variantes nos cards', () => {
 
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0][0].id).toBe('v5');
-    expect(document.querySelectorAll('.media-badge--variants')).toHaveLength(2);
+    expect(document.querySelectorAll('.media-badge--variants')).toHaveLength(0);
   });
 });
 
@@ -300,9 +342,12 @@ describe('colapso de variantes em um card por grupo', () => {
 
     const sel = cards[0].querySelector('.variant-select');
     expect(sel).not.toBeNull();
+    expect(cards[0].querySelectorAll('.quality-choice')).toHaveLength(2);
+    expect(cards[0].querySelector('.quality-choice.selected strong').textContent).toBe('video');
+    expect(cards[0].querySelector('.quality-choice.selected small').textContent).toContain('MP4');
     expect(sel.querySelectorAll('option')).toHaveLength(3);
     expect(sel.querySelector('option[value=""]').textContent).toBe('Selecionar variante');
-    expect(cards[0].querySelector('.media-badge--variants').textContent).toBe('2 variantes');
+    expect(cards[0].querySelector('.media-badge--variants')).toBeNull();
   });
 
   it('grupo com 3 variantes vira um único card', async () => {
@@ -320,7 +365,7 @@ describe('colapso de variantes em um card por grupo', () => {
     expect(cards).toHaveLength(1);
     expect(cards[0].dataset.id).toBe('a2');
     expect(cards[0].querySelector('.variant-select').querySelectorAll('option')).toHaveLength(4);
-    expect(cards[0].querySelector('.media-badge--variants').textContent).toBe('3 variantes');
+    expect(cards[0].querySelector('.media-badge--variants')).toBeNull();
   });
 
   it('escolher uma variante desmarca a anterior e troca o card', async () => {
